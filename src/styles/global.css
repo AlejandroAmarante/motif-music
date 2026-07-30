@@ -1,0 +1,167 @@
+/* ============================================================
+   Motif — Design Tokens
+   Palette: dim, warm, analog-console feel — an amber VU-meter glow
+   against near-black, not a streaming-app gradient.
+   Type: Space Grotesk (display, technical/geometric) + Inter (body)
+   + JetBrains Mono (numeric data — bitrate, duration, track counts).
+   Signature: a repeating vertical "motif" bar — a recurring waveform
+   motif, echoed in the tab indicator, loaders, and empty states.
+   ============================================================ */
+
+:root {
+  /* Color */
+  --bg: #12141a;
+  --bg-elevated: #181b23;
+  --surface: #1e2129;
+  --surface-hover: #262a34;
+  --border: #2b2f3a;
+  --text: #edeef2;
+  --text-muted: #8b8fa3;
+  --text-faint: #565b6b;
+  --accent: #e8a33d;
+  --accent-dim: #c98a2e;
+  --accent-wash: rgba(232, 163, 61, 0.12);
+  --accent-secondary: #5fbf9f;
+  --danger: #d9636c;
+
+  /* Type */
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* Layout */
+  --nav-height: 60px;
+  --miniplayer-height: 64px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --thumb: 44px; /* minimum touch target */
+
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  overscroll-behavior-y: none;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+#root {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+p {
+  margin: 0;
+}
+
+button {
+  font-family: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+[tabindex]:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.scroll-region {
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* --- Motif signature mark: a small repeating waveform, used for
+   loading states, active-tab indicators, and empty states. --- */
+.motif-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 16px;
+}
+.motif-mark span {
+  width: 2.5px;
+  border-radius: 2px;
+  background: var(--accent);
+  display: block;
+}
+.motif-mark.static span:nth-child(1) { height: 40%; }
+.motif-mark.static span:nth-child(2) { height: 100%; }
+.motif-mark.static span:nth-child(3) { height: 65%; }
+.motif-mark.static span:nth-child(4) { height: 80%; }
+
+.motif-mark.pulse span {
+  animation: motif-pulse 1.1s ease-in-out infinite;
+}
+.motif-mark.pulse span:nth-child(1) { animation-delay: -0.9s; }
+.motif-mark.pulse span:nth-child(2) { animation-delay: -0.6s; }
+.motif-mark.pulse span:nth-child(3) { animation-delay: -0.3s; }
+.motif-mark.pulse span:nth-child(4) { animation-delay: 0s; }
+
+@keyframes motif-pulse {
+  0%, 100% { height: 30%; }
+  50% { height: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motif-mark.pulse span {
+    animation: none;
+    height: 70%;
+  }
+  * {
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "motif",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local-first music player & discovery PWA. Your library, not a subscription.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "idb": "^8.0.0",
+    "music-metadata": "^10.9.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-window": "^1.8.10"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.4.0",
+    "vite-plugin-pwa": "^0.20.5"
+  }
+}
