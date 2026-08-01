@@ -48,11 +48,6 @@ export function BottomNav({ active, onChange }) {
               {ICONS[tab.id]}
             </svg>
             <span>{tab.label}</span>
-            {isActive && (
-              <span className="motif-mark static" aria-hidden="true">
-                <span /><span /><span /><span />
-              </span>
-            )}
           </button>
         );
       })}

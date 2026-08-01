@@ -1,4 +1,4 @@
-import { getAllLite } from '../db/songsRepo.js';
+import { getAllLite, getByIds } from '../db/songsRepo.js';
 import { getAllArtists } from '../db/artistsRepo.js';
 import { getAllAlbums } from '../db/albumsRepo.js';
 import { fuzzyScore } from './fuzzy.js';
@@ -29,8 +29,16 @@ export async function search(query, version) {
       .slice(0, MAX_RESULTS_PER_GROUP)
       .map((r) => r.row);
 
+  const songMatches = scoreGroup(songs, (s) => `${s.titleLower} ${normalize(s.artist)} ${normalize(s.album)}`);
+  // The in-memory index only holds lite rows (id/title/artist/album) to stay
+  // cheap at 250k songs — hydrate just the capped result set into full
+  // records so artwork, duration, and favorite state render correctly.
+  const hydratedSongs = await getByIds(songMatches.map((s) => s.id));
+  const byId = new Map(hydratedSongs.map((s) => [s.id, s]));
+  const orderedSongs = songMatches.map((s) => byId.get(s.id)).filter(Boolean);
+
   return {
-    songs: scoreGroup(songs, (s) => `${s.titleLower} ${normalize(s.artist)} ${normalize(s.album)}`),
+    songs: orderedSongs,
     artists: scoreGroup(artists, (a) => a.nameLower),
     albums: scoreGroup(albums, (a) => a.nameLower)
   };

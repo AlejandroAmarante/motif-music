@@ -87,6 +87,7 @@ export async function upsertFromScan({ path, dirHandleId, fileName, format, size
     skipCount: existing?.skipCount ?? 0,
     favorite: existing?.favorite ?? 0, // 0/1, not boolean — IndexedDB index keys can't be booleans
     rating: existing?.rating ?? 0,
+    lyrics: tags.lyrics ?? null, // { synced: [{time,text}]|null, text: string|null } | null
     metadataSchemaVersion: METADATA_SCHEMA_VERSION
   };
 
@@ -104,10 +105,59 @@ export async function upsertFromScan({ path, dirHandleId, fileName, format, size
 export async function removeByPath(path) {
   const song = await getByPath(path);
   if (!song) return null;
+  return _removeSongRecord(song);
+}
+
+/** Same cleanup as removeByPath, keyed by id — used when a playback attempt (not a rescan) confirms a file is gone. */
+export async function removeById(id) {
+  const song = await getById(id);
+  if (!song) return null;
+  return _removeSongRecord(song);
+}
+
+async function _removeSongRecord(song) {
   const db = await getDb();
   await db.delete('songs', song.id);
   await adjustArtistSongCount(song.artistId, -1);
   if (song.albumId) await adjustAlbumSongCount(song.albumId, -1);
+  return song;
+}
+
+/**
+ * Flags a song as unavailable (file couldn't be resolved during playback)
+ * or clears that flag once it resolves successfully again. This is
+ * separate from the scanner's deletion path: a rescan *confirms* absence
+ * within an accessible directory and removes the record outright, while
+ * this handles the lazier case — the directory itself might be
+ * disconnected, so we don't know for certain the file is gone, just that
+ * we can't currently reach it.
+ */
+export async function markMissing(id, missing) {
+  const db = await getDb();
+  const tx = db.transaction('songs', 'readwrite');
+  const song = await tx.store.get(id);
+  if (song && Boolean(song.missing) !== missing) {
+    song.missing = missing ? 1 : 0;
+    await tx.store.put(song);
+  }
+  await tx.done;
+  return song;
+}
+
+/**
+ * Persists a lyrics lookup result: a real `{synced, text}` object, or
+ * `false` to record "checked online, nothing found" so we don't keep
+ * re-querying LRCLIB for a track that genuinely has no lyrics there.
+ */
+export async function setLyrics(id, lyrics) {
+  const db = await getDb();
+  const tx = db.transaction('songs', 'readwrite');
+  const song = await tx.store.get(id);
+  if (song) {
+    song.lyrics = lyrics;
+    await tx.store.put(song);
+  }
+  await tx.done;
   return song;
 }
 
@@ -135,6 +185,12 @@ export async function getByIds(ids) {
   const results = await Promise.all(ids.map((id) => tx.store.get(id)));
   await tx.done;
   return results.filter(Boolean);
+}
+
+/** All songs on a given album, for the Library search "filter to this album" shortcut. */
+export async function getByAlbumId(albumId) {
+  const db = await getDb();
+  return db.getAllFromIndex('songs', 'byAlbumId', albumId);
 }
 
 /** Lightweight rows for building the in-memory search index (see search/index.js). */

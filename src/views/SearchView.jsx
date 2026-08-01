@@ -55,7 +55,11 @@ export function SearchView() {
 
   return (
     <div className="view search-view">
-      <header className="view__header search-view__header">
+      <header className="view__header">
+        <h1>Search</h1>
+      </header>
+
+      <div className="library-view__search">
         <div className="search-view__input-wrap">
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="10.5" cy="10.5" r="6.5" /><line x1="20" y1="20" x2="15.3" y2="15.3" /></svg>
           <input
@@ -69,12 +73,12 @@ export function SearchView() {
             autoComplete="off"
           />
         </div>
-      </header>
+      </div>
 
       <div className="view__scroll scroll-region">
         {!query.trim() && recents.length > 0 && (
           <section className="search-view__recents">
-            <h3 className="home-rail__title">Recent searches</h3>
+            <h2 className="home-rail__title">Recent searches</h2>
             {recents.map((term) => (
               <button key={term} className="search-view__recent-item" onClick={() => setQuery(term)}>
                 {term}
@@ -85,7 +89,7 @@ export function SearchView() {
 
         {results.songs.length > 0 && (
           <section>
-            <h3 className="home-rail__title">Songs</h3>
+            <h2 className="home-rail__title">Songs</h2>
             {results.songs.map((song) => (
               <div key={song.id} className="search-result" onClick={() => playSong(song)} role="button" tabIndex={0}>
                 <Artwork artworkId={song.artworkId} alt="" className="search-result__art" />
@@ -100,7 +104,7 @@ export function SearchView() {
 
         {results.artists.length > 0 && (
           <section>
-            <h3 className="home-rail__title">Artists</h3>
+            <h2 className="home-rail__title">Artists</h2>
             {results.artists.map((artist) => (
               <div key={artist.id} className="search-result search-result--text">
                 {artist.name}
@@ -111,7 +115,7 @@ export function SearchView() {
 
         {results.albums.length > 0 && (
           <section>
-            <h3 className="home-rail__title">Albums</h3>
+            <h2 className="home-rail__title">Albums</h2>
             {results.albums.map((album) => (
               <div key={album.id} className="search-result search-result--text">
                 {album.name}

@@ -89,6 +89,23 @@ export class Queue {
     return this.current();
   }
 
+  /**
+   * Advances to the next track regardless of repeat mode — used when the
+   * current track failed to load. Normal next() intentionally stays put in
+   * repeat-one mode, which is correct for playback but would retry a
+   * broken file forever if reused for failure recovery.
+   */
+  forceAdvance() {
+    if (!this.songs.length) return null;
+    if (this.index + 1 < this.order.length) {
+      this.index += 1;
+    } else {
+      this.index = 0;
+    }
+    this._emit();
+    return this.current();
+  }
+
   previous() {
     if (!this.songs.length) return null;
     if (this.index > 0) {

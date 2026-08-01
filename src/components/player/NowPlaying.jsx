@@ -1,9 +1,18 @@
+import { useState } from 'react';
 import { usePlayer } from '../../state/PlayerContext.jsx';
 import { useSwipe } from '../../utils/useSwipe.js';
+import { useMountTransition } from '../../utils/useMountTransition.js';
+import { useSmoothProgress } from '../../utils/useSmoothProgress.js';
 import { Artwork } from '../common/Artwork.jsx';
+import { LyricsView } from './LyricsView.jsx';
 import { formatDuration } from '../../utils/formatTime.js';
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2];
+
+// Stops a drag control (seek bar, volume slider) from also being read as a
+// screen-wide swipe gesture — without this, scrubbing left/right would skip
+// tracks and dragging down would close the sheet.
+const isolateDrag = { onPointerDown: (e) => e.stopPropagation() };
 
 export function NowPlaying() {
   const {
@@ -29,27 +38,44 @@ export function NowPlaying() {
     closeNowPlaying
   } = usePlayer();
 
-  const swipeHandlers = useSwipe({ onSwipeDown: closeNowPlaying });
+  const [dragValue, setDragValue] = useState(null);
+  const [lyricsOpen, setLyricsOpen] = useState(false);
+  const { shouldRender, entered } = useMountTransition(nowPlayingOpen, 320);
+  const smoothTime = useSmoothProgress(currentTime, isPlaying, playbackRate);
 
-  if (!nowPlayingOpen || !current) return null;
+  // Spotify-style: a swipe anywhere on the screen closes/skips, regardless
+  // of where it starts. Drag controls opt out via isolateDrag above.
+  const swipeHandlers = useSwipe({ onSwipeDown: closeNowPlaying, onSwipeLeft: next, onSwipeRight: previous });
+
+  if (!shouldRender || !current) return null;
 
   const cycleSpeed = () => {
     const i = SPEEDS.indexOf(playbackRate);
     setPlaybackRate(SPEEDS[(i + 1) % SPEEDS.length]);
   };
 
+  const displayedTime = dragValue ?? smoothTime;
+
   return (
-    <div className="now-playing">
-      <div className="now-playing__handle-zone" {...swipeHandlers}>
+    <div className={`now-playing${entered ? ' is-open' : ''}`} {...swipeHandlers}>
+      <div className="now-playing__handle-zone">
         <button className="now-playing__collapse" onClick={closeNowPlaying} aria-label="Collapse Now Playing">
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="6 9 12 15 18 9" /></svg>
         </button>
         <span className="now-playing__eyebrow">Playing from Library</span>
-        <div style={{ width: 22 }} />
+        {current.lyrics !== false ? (
+          <button className="now-playing__collapse" onClick={() => setLyricsOpen(true)} aria-label="Show lyrics">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path d="M19 10v1a7 7 0 0 1-14 0v-1" /><line x1="12" y1="18" x2="12" y2="22" /><line x1="9" y1="22" x2="15" y2="22" />
+            </svg>
+          </button>
+        ) : (
+          <div style={{ width: 22 }} />
+        )}
       </div>
 
       <div className="now-playing__art-wrap">
-        <Artwork artworkId={current.artworkId} alt={`${current.album || current.title} artwork`} className="now-playing__art" />
+        <Artwork artworkId={current.artworkId} alt={`${current.album || current.title} artwork`} className="now-playing__art" playing={isPlaying} />
       </div>
 
       <div className="now-playing__meta">
@@ -63,12 +89,17 @@ export function NowPlaying() {
           min={0}
           max={duration || 0}
           step={0.1}
-          value={Math.min(currentTime, duration || 0)}
-          onChange={(e) => seek(Number(e.target.value))}
+          value={Math.min(displayedTime, duration || 0)}
+          onInput={(e) => setDragValue(Number(e.target.value))}
+          onChange={(e) => {
+            seek(Number(e.target.value));
+            setDragValue(null);
+          }}
+          {...isolateDrag}
           aria-label="Seek"
         />
         <div className="now-playing__times mono">
-          <span>{formatDuration(currentTime)}</span>
+          <span>{formatDuration(displayedTime)}</span>
           <span>{formatDuration(duration)}</span>
         </div>
       </div>
@@ -123,16 +154,25 @@ export function NowPlaying() {
           )}
         </button>
         <input
-          className="now-playing__volume"
+          className="now-playing__volume now-playing__volume--desktop-only"
           type="range"
           min={0}
           max={1}
           step={0.01}
           value={muted ? 0 : volume}
           onChange={(e) => setVolume(Number(e.target.value))}
+          {...isolateDrag}
           aria-label="Volume"
         />
       </div>
+
+      <LyricsView
+        isOpen={lyricsOpen}
+        onClose={() => setLyricsOpen(false)}
+        song={current}
+        currentTime={smoothTime}
+        onSeekTo={seek}
+      />
     </div>
   );
 }

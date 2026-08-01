@@ -1,43 +1,61 @@
 /* ============================================================
    Motif — Design Tokens
-   Palette: dim, warm, analog-console feel — an amber VU-meter glow
-   against near-black, not a streaming-app gradient.
-   Type: Space Grotesk (display, technical/geometric) + Inter (body)
+   Palette: restrained monochrome — black, charcoal, white. Color is
+   reserved for meaning (errors), never decoration.
+   Type: Newsreader (serif, section titles and large headings) +
+   Inter (sans, everything functional: body, buttons, inputs, labels)
    + JetBrains Mono (numeric data — bitrate, duration, track counts).
-   Signature: a repeating vertical "motif" bar — a recurring waveform
-   motif, echoed in the tab indicator, loaders, and empty states.
+   Motion: every entrance has a matching, mirrored exit — see
+   useMountTransition.js and the --ease/--duration tokens below.
    ============================================================ */
 
 :root {
-  /* Color */
-  --bg: #12141a;
-  --bg-elevated: #181b23;
-  --surface: #1e2129;
-  --surface-hover: #262a34;
-  --border: #2b2f3a;
-  --text: #edeef2;
-  --text-muted: #8b8fa3;
-  --text-faint: #565b6b;
-  --accent: #e8a33d;
-  --accent-dim: #c98a2e;
-  --accent-wash: rgba(232, 163, 61, 0.12);
-  --accent-secondary: #5fbf9f;
-  --danger: #d9636c;
+  /* Color — blacks, greys, near-white. No decorative accent color. */
+  --bg: #000000;
+  --bg-elevated: #0b0b0c;
+  --surface: #131314;
+  --surface-hover: #1c1c1e;
+  --border: #232325;
+  --border-strong: #333336;
+  --text: #f5f5f6;
+  --text-muted: #9a9a9f;
+  --text-faint: #58585c;
+  --accent: #f5f5f6; /* near-white — the only "accent," used for active/selected state */
+  --accent-wash: rgba(245, 245, 246, 0.07);
+  --danger: #e5484d;
+  --success: #4cae6b;
 
   /* Type */
-  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-display: 'Newsreader', 'Iowan Old Style', Georgia, serif;
   --font-body: 'Inter', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
+  /* Spacing scale — reference these instead of ad hoc px values */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 28px;
+  --space-7: 36px;
+
   /* Layout */
-  --nav-height: 60px;
-  --miniplayer-height: 64px;
+  --nav-height: 66px;
+  --miniplayer-height: 72px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --radius-sm: 6px;
   --radius-md: 12px;
   --radius-lg: 20px;
-  --thumb: 44px; /* minimum touch target */
+  --thumb: 50px; /* minimum touch target */
+
+  /* Motion — shared across modals, sheets, toasts, and list transitions
+     so nothing in the app moves on its own timing. */
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-sharp: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 140ms;
+  --duration-base: 220ms;
+  --duration-slow: 320ms;
 
   color-scheme: dark;
 }
@@ -153,6 +171,21 @@ img {
 @keyframes motif-pulse {
   0%, 100% { height: 30%; }
   50% { height: 100%; }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  button:not(:disabled) {
+    transition: opacity var(--duration-fast) var(--ease-sharp), background-color var(--duration-fast) var(--ease-sharp);
+  }
+  button:not(:disabled):hover {
+    opacity: 0.78;
+  }
+  .song-row:hover,
+  .search-result:hover,
+  .home-card:hover .home-card__art,
+  .folder-picker__item:hover {
+    background: var(--surface-hover);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

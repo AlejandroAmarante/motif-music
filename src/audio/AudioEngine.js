@@ -2,6 +2,10 @@ import { Queue } from './queue.js';
 import { resolveFile } from '../library/resolveFile.js';
 import { recordPlay } from '../db/songsRepo.js';
 import { updateMediaSessionMetadata, updatePlaybackState, updatePositionState } from './mediaSession.js';
+import { pushToast } from '../state/toastBus.js';
+import { handleLoadFailure, handleLoadSuccess } from '../library/missingFiles.js';
+
+const MAX_CONSECUTIVE_FAILURES = 8;
 
 export class AudioEngine {
   constructor() {
@@ -11,6 +15,7 @@ export class AudioEngine {
     this._objectUrl = null;
     this._buffering = false;
     this._countedThisTrack = false;
+    this._consecutiveFailures = 0;
     this._listeners = new Set();
 
     this.queue.onChange(() => this._emit());
@@ -28,15 +33,16 @@ export class AudioEngine {
   }
 
   getState() {
+    const song = this.queue.current();
     return {
-      current: this.queue.current(),
+      current: song,
       upNext: this.queue.peekNext(),
       queueSongs: this.queue.orderedSongs(),
       queueIndex: this.queue.index,
       isPlaying: !this.audio.paused && !this.audio.ended,
       buffering: this._buffering,
-      currentTime: this.audio.currentTime || 0,
-      duration: this.audio.duration || this.queue.current()?.duration || 0,
+      currentTime: this._buffering ? 0 : this.audio.currentTime || 0,
+      duration: this._buffering ? song?.duration || 0 : this.audio.duration || song?.duration || 0,
       volume: this.audio.volume,
       muted: this.audio.muted,
       playbackRate: this.audio.playbackRate,
@@ -58,17 +64,57 @@ export class AudioEngine {
     this._countedThisTrack = false;
     this._emit();
     try {
-      const file = await resolveFile(song);
-      if (this._objectUrl) URL.revokeObjectURL(this._objectUrl);
-      this._objectUrl = URL.createObjectURL(file);
-      this.audio.src = this._objectUrl;
+      if (song.sampleUrl) {
+        // Bundled demo tracks are static assets, not user files — no File
+        // System Access resolution or object URL bookkeeping needed.
+        if (this._objectUrl) {
+          URL.revokeObjectURL(this._objectUrl);
+          this._objectUrl = null;
+        }
+        this.audio.src = song.sampleUrl;
+      } else {
+        const file = await resolveFile(song);
+        if (this._objectUrl) URL.revokeObjectURL(this._objectUrl);
+        this._objectUrl = URL.createObjectURL(file);
+        this.audio.src = this._objectUrl;
+      }
       await updateMediaSessionMetadata(song);
+      this._consecutiveFailures = 0;
+      handleLoadSuccess(song).catch(() => {});
     } catch (err) {
-      console.error('[motif/audio] could not load', song?.title, err);
-      await this.next();
+      await this._handleFailure(song, err);
     } finally {
       this._buffering = false;
       this._emit();
+    }
+  }
+
+  /** Shared by resolveFile() failures and native <audio> 'error' events — always a safe, capped skip. */
+  async _handleFailure(song, err) {
+    console.error('[motif/audio] could not load', song?.title, err);
+    pushToast(`Couldn't play "${song.title}" — skipping`, { type: 'error' });
+    handleLoadFailure(song).catch(() => {});
+    this._consecutiveFailures += 1;
+    if (this._consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+      this._consecutiveFailures = 0;
+      pushToast('Too many tracks failed to load — stopping', { type: 'error' });
+      this.pause();
+      return;
+    }
+    await this._forceNext();
+  }
+
+  /**
+   * Advances past a track that just failed to load, ignoring repeat-one —
+   * retrying the same broken file forever would hang instead of skipping.
+   */
+  async _forceNext() {
+    const next = this.queue.forceAdvance();
+    if (next) {
+      await this._loadCurrent();
+      await this.play();
+    } else {
+      this.pause();
     }
   }
 
@@ -189,8 +235,7 @@ export class AudioEngine {
       this.next();
     });
     this.audio.addEventListener('error', () => {
-      console.error('[motif/audio] element error, skipping track');
-      this.next();
+      this._handleFailure(this.queue.current(), this.audio.error);
     });
   }
 

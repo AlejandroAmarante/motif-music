@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { FolderPicker } from '../components/library/FolderPicker.jsx';
+import { useMountTransition } from '../utils/useMountTransition.js';
+import { usePlayer } from '../state/PlayerContext.jsx';
+import { SAMPLE_TRACKS } from '../library/sampleTracks.js';
 
 function useStorageEstimate() {
   const [estimate, setEstimate] = useState(null);
@@ -18,11 +20,15 @@ function formatBytes(bytes) {
   return `${mb.toFixed(0)} MB`;
 }
 
-export function SettingsView({ onClose }) {
+export function SettingsView({ isOpen, onClose, onOpenFolders }) {
   const estimate = useStorageEstimate();
+  const { playSongs } = usePlayer();
+  const { shouldRender, entered } = useMountTransition(isOpen, 280);
+
+  if (!shouldRender) return null;
 
   return (
-    <div className="settings-overlay">
+    <div className={`settings-overlay${entered ? ' is-open' : ''}`}>
       <div className="now-playing__handle-zone">
         <button className="now-playing__collapse" onClick={onClose} aria-label="Close settings">
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="6 9 12 15 18 9" /></svg>
@@ -33,13 +39,15 @@ export function SettingsView({ onClose }) {
 
       <div className="view__scroll scroll-region settings-overlay__body">
         <section>
-          <h3 className="home-rail__title">Library folders</h3>
-          <FolderPicker />
+          <h2 className="home-rail__title">Library</h2>
+          <button className="settings-overlay__sample-btn" onClick={onOpenFolders}>
+            Manage connected folders
+          </button>
         </section>
 
         {estimate && (
           <section>
-            <h3 className="home-rail__title">Storage</h3>
+            <h2 className="home-rail__title">Storage</h2>
             <p className="settings-overlay__storage mono">
               {formatBytes(estimate.usage)} used of {formatBytes(estimate.quota)} available
             </p>
@@ -50,8 +58,19 @@ export function SettingsView({ onClose }) {
         )}
 
         <section>
-          <h3 className="home-rail__title">About</h3>
-          <p className="settings-overlay__note">Motif — local-first music. Your library, not a subscription.</p>
+          <h2 className="home-rail__title">Test playback</h2>
+          <button className="settings-overlay__sample-btn" onClick={() => playSongs(SAMPLE_TRACKS, 0)}>
+            Play sample tracks
+          </button>
+          <p className="settings-overlay__note">
+            Three short synthesized placeholder tones, generated locally — useful for confirming playback
+            works before connecting a real folder.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="home-rail__title">About</h2>
+          <p className="settings-overlay__note">Local-first music. Your library, not a subscription.</p>
         </section>
       </div>
     </div>

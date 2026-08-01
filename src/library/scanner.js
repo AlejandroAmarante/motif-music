@@ -1,10 +1,12 @@
 import { isSupportedFile, extensionOf } from './formats.js';
 import { parseFileMetadata } from './metadataParser.js';
+import { mergeLyrics } from './lyrics.js';
 import { getByPath, upsertFromScan, removeByPath, getPathsForDir } from '../db/songsRepo.js';
 
 /**
  * Recursively walks a directory handle, yielding every supported audio
- * file as { fileHandle, file, relativePath }.
+ * file as { fileHandle, parentHandle, path }. parentHandle lets us look
+ * for a sibling .lrc lyrics file without re-walking the tree.
  */
 async function* walk(dirHandle, relativePath = '') {
   for await (const [name, handle] of dirHandle.entries()) {
@@ -12,8 +14,20 @@ async function* walk(dirHandle, relativePath = '') {
     if (handle.kind === 'directory') {
       yield* walk(handle, path);
     } else if (isSupportedFile(name)) {
-      yield { fileHandle: handle, path };
+      yield { fileHandle: handle, parentHandle: dirHandle, path };
     }
+  }
+}
+
+/** Reads a sidecar song.lrc next to song.mp3, if one exists. Absence is the common case, not an error. */
+async function readSidecarLrc(parentHandle, fileName) {
+  const lrcName = fileName.replace(/\.[^./]+$/, '') + '.lrc';
+  try {
+    const lrcHandle = await parentHandle.getFileHandle(lrcName);
+    const lrcFile = await lrcHandle.getFile();
+    return await lrcFile.text();
+  } catch {
+    return null; // no sidecar file — normal, not logged
   }
 }
 
@@ -32,7 +46,7 @@ export async function scanDirectory(dirHandleRecord, { onProgress } = {}) {
   const stats = { scanned: 0, created: 0, updated: 0, unchanged: 0, removed: 0, errors: 0 };
 
   let i = 0;
-  for await (const { fileHandle, path } of walk(handle)) {
+  for await (const { fileHandle, parentHandle, path } of walk(handle)) {
     i += 1;
     stillPresent.add(path);
     try {
@@ -43,6 +57,9 @@ export async function scanDirectory(dirHandleRecord, { onProgress } = {}) {
         stats.unchanged += 1;
       } else {
         const tags = await parseFileMetadata(file);
+        const lrcText = await readSidecarLrc(parentHandle, file.name);
+        tags.lyrics = mergeLyrics({ lrcText, embedded: tags.embeddedLyrics });
+
         const result = await upsertFromScan({
           path,
           dirHandleId,

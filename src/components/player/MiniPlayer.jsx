@@ -1,9 +1,10 @@
 import { usePlayer } from '../../state/PlayerContext.jsx';
 import { useSwipe } from '../../utils/useSwipe.js';
+import { useSmoothProgress } from '../../utils/useSmoothProgress.js';
 import { Artwork } from '../common/Artwork.jsx';
 
 export function MiniPlayer() {
-  const { current, isPlaying, buffering, currentTime, duration, toggle, next, previous, openNowPlaying } =
+  const { current, isPlaying, buffering, currentTime, duration, playbackRate, toggle, next, previous, openNowPlaying } =
     usePlayer();
 
   const swipeHandlers = useSwipe({
@@ -13,14 +14,16 @@ export function MiniPlayer() {
     onTap: openNowPlaying
   });
 
+  const smoothTime = useSmoothProgress(currentTime, isPlaying, playbackRate);
+
   if (!current) return null;
 
-  const progress = duration > 0 ? Math.min(1, currentTime / duration) : 0;
+  const progress = duration > 0 ? Math.min(1, smoothTime / duration) : 0;
 
   return (
     <div className="mini-player" role="button" tabIndex={0} aria-label={`Now playing: ${current.title}. Tap to expand.`} {...swipeHandlers}>
       <div className="mini-player__progress" style={{ transform: `scaleX(${progress})` }} />
-      <Artwork artworkId={current.artworkId} alt="" className="mini-player__art" />
+      <Artwork artworkId={current.artworkId} alt="" className="mini-player__art" playing={isPlaying} />
       <div className="mini-player__text">
         <p className="mini-player__title">{current.title}</p>
         <p className="mini-player__artist">{current.artist}</p>
@@ -28,6 +31,8 @@ export function MiniPlayer() {
       <button
         className="mini-player__play"
         aria-label={isPlaying ? 'Pause' : 'Play'}
+        onPointerDown={(e) => e.stopPropagation()}
+        onPointerUp={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation();
           toggle();
