@@ -12,6 +12,10 @@ import {
   handleLoadSuccess,
 } from "../library/missingFiles.js";
 import { fetchLrclibLyrics } from "../library/lrclib.js";
+import {
+  prefetchAlbumArtwork,
+  albumArtworkContext,
+} from "../artwork/artworkManager.js";
 
 const MAX_CONSECUTIVE_FAILURES = 8;
 
@@ -21,11 +25,6 @@ export class AudioEngine {
     this.audio.preload = "auto";
     this.queue = new Queue();
     this._objectUrl = null;
-    // `_loading` hides stale time/duration during an actual track switch.
-    // `_buffering` drives the spinner only — it also fires on ordinary
-    // mid-track stalls and on every seek (the element briefly rebuffers at
-    // the new position), so it must never be the thing that zeroes time,
-    // or seeking visibly snaps the display back to 00:00.
     this._loading = false;
     this._buffering = false;
     this._scrubbing = false;
@@ -100,6 +99,7 @@ export class AudioEngine {
       await updateMediaSessionMetadata(song);
       this._consecutiveFailures = 0;
       handleLoadSuccess(song).catch(() => {});
+      prefetchAlbumArtwork(albumArtworkContext(this.queue.peekNext()));
     } catch (err) {
       await this._handleFailure(song, err);
     } finally {
@@ -157,18 +157,12 @@ export class AudioEngine {
     if (Number.isFinite(time)) this.audio.currentTime = time;
   }
 
-  /**
-   * Begins a seek-bar drag: pauses outright so nothing plays audibly while
-   * the user drags. Visual position during the drag lives entirely in the
-   * UI's local state — this never touches audio.currentTime mid-drag.
-   */
   beginScrub() {
     this._scrubbing = true;
     this._wasPlayingBeforeScrub = !this.audio.paused;
     this.audio.pause();
   }
 
-  /** Commits the drag: seeks to the released position, resumes if it was playing before the drag started. */
   endScrub(time) {
     this._scrubbing = false;
     this.seek(time);
@@ -209,7 +203,6 @@ export class AudioEngine {
     }
   }
 
-  /** Spotify-style behavior: restart the track if we're more than 3s in. */
   async previous() {
     if (this.audio.currentTime > 3) {
       this.seek(0);
@@ -240,14 +233,6 @@ export class AudioEngine {
     this.queue.removeAt(orderPosition);
   }
 
-  /**
-   * Lyrics previously confirmed absent (`song.lyrics === false`) get one
-   * re-check per play, fired only once actual playback starts — never as
-   * a background scan — out of respect for LRCLIB. A found result is
-   * cached the same way LyricsView's own on-demand lookup is, and emitted
-   * so the Lyrics button can re-enable itself without the panel being
-   * reopened.
-   */
   async _maybeRecheckLyrics() {
     const song = this.queue.current();
     if (
@@ -269,8 +254,6 @@ export class AudioEngine {
       setLyrics(song.id, result).catch(() => {});
       this._emit();
     }
-    // `false` (still confirmed absent) or `null` (lookup failed) — leave
-    // the cached state as-is; either way we'll just try again next play.
   }
 
   _bindAudioEvents() {
@@ -301,8 +284,6 @@ export class AudioEngine {
       this._emit();
     });
     this.audio.addEventListener("seeked", () => {
-      // Confirms the post-seek position immediately rather than waiting on
-      // the next (possibly sparse) timeupdate tick — see beginScrub/endScrub.
       this._emit();
     });
     this.audio.addEventListener("ended", () => {

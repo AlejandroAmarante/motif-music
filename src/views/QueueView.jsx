@@ -64,7 +64,7 @@ export function QueueView() {
         {current && (
           <div className="search-result search-result--current">
             <Artwork
-              artworkId={current.artworkId}
+              song={current}
               alt=""
               className="search-result__art"
               playing={isPlaying}
@@ -83,7 +83,7 @@ export function QueueView() {
         {repeatMode === "one" && current && (
           <div className="search-result queue-view__repeat-row">
             <Artwork
-              artworkId={current.artworkId}
+              song={current}
               alt=""
               className="search-result__art"
               playing={false}
@@ -110,9 +110,10 @@ export function QueueView() {
               tabIndex={0}
             >
               <Artwork
-                artworkId={song.artworkId}
+                song={current}
                 alt=""
                 className="search-result__art"
+                playing={false}
               />
               <div className="song-row__text">
                 <p className="song-row__title">{song.title}</p>

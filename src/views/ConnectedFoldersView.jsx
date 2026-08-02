@@ -35,7 +35,7 @@ export function ConnectedFoldersView({ isOpen, onClose }) {
           <ChevronDown size={22} strokeWidth={2} />
         </button>
         <span className="now-playing__eyebrow">Connected Folders</span>
-        <div style={{ width: 22 }} />
+        <div className="now-playing__spacer" />
       </div>
 
       <div className="view__scroll scroll-region settings-overlay__body">

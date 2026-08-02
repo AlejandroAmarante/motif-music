@@ -74,7 +74,7 @@ export function LyricsView({ isOpen, onClose, song, currentTime, onSeekTo }) {
           <ChevronDown size={22} strokeWidth={2} />
         </button>
         <span className="now-playing__eyebrow">Lyrics</span>
-        <div style={{ width: 22 }} />
+        <div className="now-playing__spacer" />
       </div>
 
       <div className="lyrics-view__body scroll-region">

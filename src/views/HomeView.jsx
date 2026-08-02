@@ -22,11 +22,7 @@ function Rail({ title, songs, onPlay }) {
             className="home-card"
             onClick={() => onPlay(songs, i)}
           >
-            <Artwork
-              artworkId={song.artworkId}
-              alt=""
-              className="home-card__art"
-            />
+            <Artwork song={song} alt="" className="home-card__art" />
             <p className="home-card__title">{song.title}</p>
             <p className="home-card__artist">{song.artist}</p>
           </button>

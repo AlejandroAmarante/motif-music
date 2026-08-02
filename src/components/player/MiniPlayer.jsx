@@ -47,7 +47,7 @@ export function MiniPlayer() {
         style={{ transform: `scaleX(${progress})` }}
       />
       <Artwork
-        artworkId={current.artworkId}
+        song={current}
         alt=""
         className="mini-player__art"
         playing={isPlaying}

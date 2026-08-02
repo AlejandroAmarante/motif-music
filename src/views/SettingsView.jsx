@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { useMountTransition } from "../utils/useMountTransition.js";
 import { usePlayer } from "../state/PlayerContext.jsx";
+import { getSetting, setSetting } from "../db/settingsRepo.js";
 import { SAMPLE_TRACKS } from "../library/sampleTracks.js";
 
 function useStorageEstimate() {
@@ -25,6 +26,11 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
   const estimate = useStorageEstimate();
   const { playSongs } = usePlayer();
   const { shouldRender, entered } = useMountTransition(isOpen, 280);
+  const [discogsToken, setDiscogsToken] = useState("");
+
+  useEffect(() => {
+    getSetting("discogsToken", "").then((v) => setDiscogsToken(v || ""));
+  }, []);
 
   if (!shouldRender) return null;
 
@@ -39,7 +45,7 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
           <ChevronDown size={22} strokeWidth={2} />
         </button>
         <span className="now-playing__eyebrow">Settings</span>
-        <div style={{ width: 22 }} />
+        <div className="now-playing__spacer" />
       </div>
 
       <div className="view__scroll scroll-region settings-overlay__body">
@@ -51,6 +57,26 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
           >
             Manage connected folders
           </button>
+        </section>
+
+        <section>
+          <h2 className="home-rail__title">Artwork</h2>
+          <p className="settings-overlay__note" style={{ marginBottom: 8 }}>
+            Missing album art is looked up automatically via MusicBrainz and
+            Deezer, once per album, and cached — no setup needed. Discogs is
+            used only as a last resort and only if you supply your own free
+            personal access token below.
+          </p>
+          <input
+            className="settings-overlay__input"
+            type="text"
+            placeholder="Discogs personal access token (optional)"
+            value={discogsToken}
+            onChange={(e) => setDiscogsToken(e.target.value)}
+            onBlur={() =>
+              setSetting("discogsToken", discogsToken.trim() || null)
+            }
+          />
         </section>
 
         {estimate && (

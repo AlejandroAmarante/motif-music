@@ -113,11 +113,7 @@ export function SearchView() {
                 role="button"
                 tabIndex={0}
               >
-                <Artwork
-                  artworkId={song.artworkId}
-                  alt=""
-                  className="search-result__art"
-                />
+                <Artwork song={song} alt="" className="search-result__art" />
                 <div className="song-row__text">
                   <p className="song-row__title">{song.title}</p>
                   <p className="song-row__artist">

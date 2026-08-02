@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSwipeable } from "react-swipeable";
 import {
   ChevronDown,
-  Mic,
+  MicVocal,
   Shuffle,
   SkipBack,
   Play,
@@ -127,13 +127,13 @@ export function NowPlaying() {
           aria-label={lyricsUnavailable ? "Lyrics unavailable" : "Show lyrics"}
           disabled={lyricsUnavailable}
         >
-          <Mic size={20} strokeWidth={1.8} />
+          <MicVocal size={20} strokeWidth={1.8} />
         </button>
       </div>
 
       <div className="now-playing__art-wrap">
         <Artwork
-          artworkId={current.artworkId}
+          song={current}
           alt={`${current.album || current.title} artwork`}
           className="now-playing__art"
           playing={isPlaying}

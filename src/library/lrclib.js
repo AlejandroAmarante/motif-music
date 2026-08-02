@@ -1,12 +1,24 @@
-import { parseLrc } from './lyrics.js';
+import { parseLrc } from "./lyrics.js";
 
-const API_BASE = 'https://lrclib.net/api';
+const API_BASE = "https://lrclib.net/api";
+
+// LRCLIB requires every client to self-identify (https://lrclib.net/docs).
+// Browsers won't let JS set the `User-Agent` header directly, so this uses
+// their documented fallback header instead. Update these three constants
+// to match this project's real name/version/homepage before shipping.
+const CLIENT_NAME = "Motif";
+const CLIENT_VERSION = "0.1.0";
+const CLIENT_HOMEPAGE = "https://github.com/REPLACE-ME/motif"; // TODO: real project URL
+
+const CLIENT_HEADERS = {
+  "Lrclib-Client": `${CLIENT_NAME} v${CLIENT_VERSION} (${CLIENT_HOMEPAGE})`,
+};
 
 function toLyricsShape(record) {
   if (!record || record.instrumental) return null;
   if (record.syncedLyrics) {
     const synced = parseLrc(record.syncedLyrics);
-    if (synced) return { synced, text: synced.map((l) => l.text).join('\n') };
+    if (synced) return { synced, text: synced.map((l) => l.text).join("\n") };
   }
   if (record.plainLyrics) return { synced: null, text: record.plainLyrics };
   return null;
@@ -14,14 +26,21 @@ function toLyricsShape(record) {
 
 async function searchFallback({ title, artist }) {
   try {
-    const params = new URLSearchParams({ track_name: title, artist_name: artist });
-    const res = await fetch(`${API_BASE}/search?${params.toString()}`);
+    const params = new URLSearchParams({
+      track_name: title,
+      artist_name: artist,
+    });
+    const res = await fetch(`${API_BASE}/search?${params.toString()}`, {
+      headers: CLIENT_HEADERS,
+    });
     if (!res.ok) return false; // reached LRCLIB, nothing usable
     const results = await res.json();
-    const best = Array.isArray(results) ? results.find((r) => r.syncedLyrics || r.plainLyrics) : null;
-    return best ? toLyricsShape(best) ?? false : false;
+    const best = Array.isArray(results)
+      ? results.find((r) => r.syncedLyrics || r.plainLyrics)
+      : null;
+    return best ? (toLyricsShape(best) ?? false) : false;
   } catch (err) {
-    console.warn('[motif/lyrics] LRCLIB search fallback failed:', err.message);
+    console.warn("[motif/lyrics] LRCLIB search fallback failed:", err.message);
     return null;
   }
 }
@@ -41,17 +60,22 @@ async function searchFallback({ title, artist }) {
 export async function fetchLrclibLyrics({ title, artist, album, duration }) {
   if (!title || !artist) return null;
   try {
-    const params = new URLSearchParams({ track_name: title, artist_name: artist });
-    if (album) params.set('album_name', album);
-    if (duration) params.set('duration', String(Math.round(duration)));
+    const params = new URLSearchParams({
+      track_name: title,
+      artist_name: artist,
+    });
+    if (album) params.set("album_name", album);
+    if (duration) params.set("duration", String(Math.round(duration)));
 
-    const res = await fetch(`${API_BASE}/get?${params.toString()}`);
+    const res = await fetch(`${API_BASE}/get?${params.toString()}`, {
+      headers: CLIENT_HEADERS,
+    });
     if (res.status === 404) return searchFallback({ title, artist });
     if (!res.ok) return null;
     const data = await res.json();
     return toLyricsShape(data) ?? false;
   } catch (err) {
-    console.warn('[motif/lyrics] LRCLIB lookup failed:', err.message);
+    console.warn("[motif/lyrics] LRCLIB lookup failed:", err.message);
     return null;
   }
 }

@@ -1,22 +1,23 @@
-import { useCallback, useRef, useState, useEffect } from 'react';
-import { FixedSizeList } from 'react-window';
-import { useVirtualSongs } from '../../state/useVirtualSongs.js';
-import { getByIds } from '../../db/songsRepo.js';
-import { usePlayer } from '../../state/PlayerContext.jsx';
-import { SongRow } from './SongRow.jsx';
+import { useCallback, useRef, useState, useEffect } from "react";
+import { FixedSizeList } from "react-window";
+import { useVirtualSongs } from "../../state/useVirtualSongs.js";
+import { getByIds } from "../../db/songsRepo.js";
+import { usePlayer } from "../../state/PlayerContext.jsx";
+import { SongRow } from "./SongRow.jsx";
 
 const ROW_HEIGHT = 68;
-const PLAY_WINDOW = 300; // how many upcoming tracks we materialize into the queue on tap
+const PLAY_WINDOW = 300;
 
-/**
- * Two modes, one component:
- *  - default: virtualized over the full library via sorted IndexedDB keys
- *  - `overrideSongs`: a small, already-resolved array (e.g. search-filtered
- *    results) — skips the windowed-fetch machinery since everything's
- *    already in memory and the result set is capped anyway.
- */
-export function SongList({ version = 0, sortIndex = 'byTitleLower', emptyState, overrideSongs = null }) {
-  const { ids, count, loading, loadRange, getRow } = useVirtualSongs({ indexName: sortIndex, version });
+export function SongList({
+  version = 0,
+  sortIndex = "byTitleLower",
+  emptyState,
+  overrideSongs = null,
+}) {
+  const { ids, count, loading, loadRange, getRow } = useVirtualSongs({
+    indexName: sortIndex,
+    version,
+  });
   const { playSongs, current, isPlaying } = usePlayer();
   const [, forceTick] = useState(0);
   const containerRef = useRef(null);
@@ -29,7 +30,9 @@ export function SongList({ version = 0, sortIndex = 'byTitleLower', emptyState, 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const observer = new ResizeObserver((entries) => setHeight(entries[0].contentRect.height));
+    const observer = new ResizeObserver((entries) =>
+      setHeight(entries[0].contentRect.height),
+    );
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
@@ -37,12 +40,21 @@ export function SongList({ version = 0, sortIndex = 'byTitleLower', emptyState, 
   const handleItemsRendered = useCallback(
     ({ overscanStartIndex, overscanStopIndex }) => {
       if (filtering) return;
-      loadRange(overscanStartIndex, overscanStopIndex).then(() => forceTick((t) => t + 1));
+      // Only force a re-render if loadRange actually fetched something new —
+      // onItemsRendered fires on essentially every render pass, and this
+      // combined with PlayerContext's per-timeupdate re-renders was causing
+      // a visible re-render storm on every list while something played.
+      loadRange(overscanStartIndex, overscanStopIndex).then((loaded) => {
+        if (loaded) forceTick((t) => t + 1);
+      });
     },
-    [loadRange, filtering]
+    [loadRange, filtering],
   );
 
-  const getRowAt = useCallback((index) => (filtering ? overrideSongs[index] : getRow(index)), [filtering, overrideSongs, getRow]);
+  const getRowAt = useCallback(
+    (index) => (filtering ? overrideSongs[index] : getRow(index)),
+    [filtering, overrideSongs, getRow],
+  );
 
   const handlePlay = useCallback(
     async (index) => {
@@ -52,12 +64,11 @@ export function SongList({ version = 0, sortIndex = 'byTitleLower', emptyState, 
       }
       const windowIds = ids.slice(index, index + PLAY_WINDOW);
       const songs = await getByIds(windowIds);
-      // getByIds doesn't preserve order (parallel gets) — restore it to match the list.
       const byId = new Map(songs.map((s) => [s.id, s]));
       const ordered = windowIds.map((id) => byId.get(id)).filter(Boolean);
       playSongs(ordered, 0);
     },
-    [filtering, overrideSongs, ids, playSongs]
+    [filtering, overrideSongs, ids, playSongs],
   );
 
   if (!effectiveLoading && effectiveCount === 0) {
@@ -79,9 +90,10 @@ export function SongList({ version = 0, sortIndex = 'byTitleLower', emptyState, 
             <SongRow
               style={style}
               song={getRowAt(index)}
+              index={index}
               isPlaying={current?.id === getRowAt(index)?.id}
               activelyPlaying={isPlaying && current?.id === getRowAt(index)?.id}
-              onPlay={() => handlePlay(index)}
+              onPlay={handlePlay}
             />
           )}
         </FixedSizeList>

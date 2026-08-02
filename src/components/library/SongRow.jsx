@@ -5,7 +5,14 @@ import { toggleFavorite, removeById } from "../../db/songsRepo.js";
 import { notifyLibraryChanged } from "../../state/libraryBus.js";
 import { Artwork } from "../common/Artwork.jsx";
 
-function SongRowInner({ song, style, isPlaying, activelyPlaying, onPlay }) {
+function SongRowInner({
+  song,
+  style,
+  isPlaying,
+  activelyPlaying,
+  onPlay,
+  index,
+}) {
   const [favorite, setFavorite] = useState(song?.favorite ?? false);
   const [removed, setRemoved] = useState(false);
 
@@ -23,12 +30,12 @@ function SongRowInner({ song, style, isPlaying, activelyPlaying, onPlay }) {
     <div
       className={`song-row${isPlaying ? " is-playing" : ""}${missing ? " is-missing" : ""}`}
       style={style}
-      onClick={onPlay}
+      onClick={() => onPlay(index)}
       role="button"
       tabIndex={0}
     >
       <Artwork
-        artworkId={song.artworkId}
+        song={song}
         alt=""
         className="song-row__art"
         playing={activelyPlaying}
