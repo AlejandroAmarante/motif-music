@@ -19,6 +19,8 @@ const ONLINE_PROVIDERS = [
 
 const inFlightRequests = new Map();
 const notifiedFailures = new Set();
+const notifiedSearching = new Set();
+const notifiedLoaded = new Set();
 
 function isCacheFresh(entry) {
   if (!entry) return false;
@@ -68,9 +70,7 @@ export function prefetchAlbumArtwork(ctx) {
  * any kind of "reload everything" signal — every live Artwork instance for
  * this album already gets the result directly through its own call to
  * resolveAlbumArtwork() above (same in-flight promise or a fresh cache
- * hit), so a global invalidation was pure overhead: it was wiping and
- * refetching the entire visible row cache for every song in the list, not
- * just the one album that changed.
+ * hit).
  */
 async function backfillAlbum(albumId, artworkId) {
   if (!albumId || !artworkId) return;
@@ -96,6 +96,8 @@ async function runPipeline(ctx) {
   if (!artist || !album) {
     return cacheFailure(albumKey, artist, album);
   }
+
+  notifySearching(albumKey, album);
 
   for (const provider of ONLINE_PROVIDERS) {
     let found;
@@ -135,6 +137,7 @@ async function runPipeline(ctx) {
     };
     await putAlbumArtworkCache(entry);
     if (albumId && artworkId) backfillAlbum(albumId, artworkId);
+    notifyLoaded(albumKey, album);
     return artworkId ? { artworkId } : { artworkUrl: entry.artworkUrl };
   }
 
@@ -168,4 +171,23 @@ function notifyFailure(albumKey, album) {
       : "Album artwork could not be loaded",
     { type: "info" },
   );
+}
+
+function notifySearching(albumKey, album) {
+  if (notifiedSearching.has(albumKey)) return;
+  notifiedSearching.add(albumKey);
+  pushToast(
+    album
+      ? `Searching for artwork for "${album}"…`
+      : "Searching for album artwork…",
+    { type: "info", duration: 2200 },
+  );
+}
+
+function notifyLoaded(albumKey, album) {
+  if (notifiedLoaded.has(albumKey)) return;
+  notifiedLoaded.add(albumKey);
+  pushToast(album ? `Artwork loaded for "${album}"` : "Album artwork loaded", {
+    type: "success",
+  });
 }

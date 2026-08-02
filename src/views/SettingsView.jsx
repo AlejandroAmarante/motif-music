@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { useMountTransition } from "../utils/useMountTransition.js";
-import { usePlayer } from "../state/PlayerContext.jsx";
+import { useLibrary } from "../state/LibraryContext.jsx";
 import { getSetting, setSetting } from "../db/settingsRepo.js";
-import { SAMPLE_TRACKS } from "../library/sampleTracks.js";
+import { resetSetup } from "../setup/setupState.js";
 
 function useStorageEstimate() {
   const [estimate, setEstimate] = useState(null);
@@ -24,9 +24,9 @@ function formatBytes(bytes) {
 
 export function SettingsView({ isOpen, onClose, onOpenFolders }) {
   const estimate = useStorageEstimate();
-  const { playSongs } = usePlayer();
   const { shouldRender, entered } = useMountTransition(isOpen, 280);
   const [discogsToken, setDiscogsToken] = useState("");
+  const { supported, motifFolderExists, createMotifFolder } = useLibrary();
 
   useEffect(() => {
     getSetting("discogsToken", "").then((v) => setDiscogsToken(v || ""));
@@ -57,6 +57,15 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
           >
             Manage connected folders
           </button>
+          {supported && !motifFolderExists && (
+            <button
+              className="settings-overlay__sample-btn"
+              style={{ marginTop: 10 }}
+              onClick={createMotifFolder}
+            >
+              Create Motif Music Folder
+            </button>
+          )}
         </section>
 
         <section>
@@ -94,17 +103,13 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
         )}
 
         <section>
-          <h2 className="home-rail__title">Test playback</h2>
-          <button
-            className="settings-overlay__sample-btn"
-            onClick={() => playSongs(SAMPLE_TRACKS, 0)}
-          >
-            Play sample tracks
+          <h2 className="home-rail__title">Setup</h2>
+          <button className="settings-overlay__sample-btn" onClick={resetSetup}>
+            Reset setup
           </button>
           <p className="settings-overlay__note">
-            Three short synthesized placeholder tones, generated locally —
-            useful for confirming playback works before connecting a real
-            folder.
+            Runs the first-run setup flow again. Your connected folders and
+            library stay exactly as they are — this only resets onboarding.
           </p>
         </section>
 

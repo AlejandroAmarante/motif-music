@@ -110,7 +110,7 @@ export function QueueView() {
               tabIndex={0}
             >
               <Artwork
-                song={current}
+                song={song}
                 alt=""
                 className="search-result__art"
                 playing={false}

@@ -1,0 +1,120 @@
+.app-loading {
+  height: 100dvh;
+  background: var(--bg);
+}
+
+.setup-flow {
+  height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px calc(var(--safe-bottom) + 32px);
+  background: var(--bg);
+}
+
+.setup-flow__card {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.setup-flow__card .motif-mark {
+  height: 22px;
+  margin-bottom: 6px;
+}
+
+.setup-flow__title {
+  font-size: 28px;
+  color: var(--text);
+}
+
+.setup-flow__body {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.setup-flow__body--warning {
+  color: var(--text);
+}
+
+.setup-flow__error {
+  font-size: 13.5px;
+  color: var(--danger);
+  line-height: 1.5;
+}
+
+.setup-flow__status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+.setup-flow__cta {
+  margin-top: 6px;
+  background: var(--text);
+  color: var(--bg);
+  font-weight: 600;
+  font-size: 15px;
+  min-height: var(--thumb);
+  padding: 0 28px;
+  border-radius: 26px;
+  align-self: stretch;
+  text-align: center;
+}
+
+.setup-flow__secondary {
+  min-height: var(--thumb);
+  padding: 0 20px;
+  color: var(--text-muted);
+  font-size: 14px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--border-strong);
+}
+
+.setup-flow__actions,
+.setup-flow__options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.setup-flow__options {
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.setup-flow__option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 16px 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  text-align: left;
+}
+
+.setup-flow__option:disabled {
+  opacity: 0.5;
+}
+
+.setup-flow__option-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.setup-flow__option-desc {
+  font-size: 13px;
+  color: var(--text-faint);
+  line-height: 1.4;
+}

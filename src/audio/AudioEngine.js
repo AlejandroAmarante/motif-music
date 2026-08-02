@@ -84,18 +84,10 @@ export class AudioEngine {
     this._lyricsRecheckedThisTrack = false;
     this._emit();
     try {
-      if (song.sampleUrl) {
-        if (this._objectUrl) {
-          URL.revokeObjectURL(this._objectUrl);
-          this._objectUrl = null;
-        }
-        this.audio.src = song.sampleUrl;
-      } else {
-        const file = await resolveFile(song);
-        if (this._objectUrl) URL.revokeObjectURL(this._objectUrl);
-        this._objectUrl = URL.createObjectURL(file);
-        this.audio.src = this._objectUrl;
-      }
+      const file = await resolveFile(song);
+      if (this._objectUrl) URL.revokeObjectURL(this._objectUrl);
+      this._objectUrl = URL.createObjectURL(file);
+      this.audio.src = this._objectUrl;
       await updateMediaSessionMetadata(song);
       this._consecutiveFailures = 0;
       handleLoadSuccess(song).catch(() => {});
@@ -235,12 +227,7 @@ export class AudioEngine {
 
   async _maybeRecheckLyrics() {
     const song = this.queue.current();
-    if (
-      !song ||
-      song.sampleUrl ||
-      song.lyrics !== false ||
-      this._lyricsRecheckedThisTrack
-    )
+    if (!song || song.lyrics !== false || this._lyricsRecheckedThisTrack)
       return;
     this._lyricsRecheckedThisTrack = true;
     const result = await fetchLrclibLyrics({

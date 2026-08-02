@@ -8,7 +8,6 @@ import {
   getTopPlayed,
 } from "../db/songsRepo.js";
 import { Artwork } from "../components/common/Artwork.jsx";
-import { SAMPLE_TRACKS } from "../library/sampleTracks.js";
 
 function Rail({ title, songs, onPlay }) {
   if (!songs.length) return null;
@@ -78,12 +77,6 @@ export function HomeView({ onOpenSettings }) {
                 Connect a folder
               </button>
             )}
-            <button
-              className="home-empty__secondary"
-              onClick={() => playSongs(SAMPLE_TRACKS, 0)}
-            >
-              Or try three sample tracks
-            </button>
           </div>
         ) : (
           <>

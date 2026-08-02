@@ -1,22 +1,32 @@
-import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+} from "react";
 import {
   isFileSystemAccessSupported,
   addLibraryFolder,
+  createMotifMusicFolder,
+  hasMotifMusicFolder,
   listLibraryFolders,
   removeLibraryFolder,
-  scanAllFolders
-} from '../library/libraryManager.js';
-import { countSongs } from '../db/songsRepo.js';
-import { getSetting, setSetting } from '../db/settingsRepo.js';
-import { watchFolders, isWatchSupported } from '../library/watchFolders.js';
-import { pushToast } from './toastBus.js';
-import { onLibraryChanged } from './libraryBus.js';
+  scanAllFolders,
+  DuplicateFolderError,
+} from "../library/libraryManager.js";
+import { countSongs } from "../db/songsRepo.js";
+import { getSetting, setSetting } from "../db/settingsRepo.js";
+import { watchFolders, isWatchSupported } from "../library/watchFolders.js";
+import { pushToast } from "./toastBus.js";
+import { onLibraryChanged } from "./libraryBus.js";
 
 const LibraryContext = createContext(null);
 
 const INTERVAL_MS = {
-  'interval-5': 5 * 60 * 1000,
-  'interval-60': 60 * 60 * 1000
+  "interval-5": 5 * 60 * 1000,
+  "interval-60": 60 * 60 * 1000,
 };
 
 export function LibraryProvider({ children }) {
@@ -24,9 +34,10 @@ export function LibraryProvider({ children }) {
   const [scanning, setScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(null);
   const [songCount, setSongCount] = useState(0);
-  const [version, setVersion] = useState(0); // bump to signal "reload from DB"
-  const [scanMode, setScanModeState] = useState('manual');
+  const [version, setVersion] = useState(0);
+  const [scanMode, setScanModeState] = useState("manual");
   const [autoRemoveMissing, setAutoRemoveMissingState] = useState(false);
+  const [motifFolderExists, setMotifFolderExists] = useState(false);
   const didStartupScan = useRef(false);
 
   const refreshFolders = useCallback(async () => {
@@ -37,38 +48,28 @@ export function LibraryProvider({ children }) {
     setSongCount(await countSongs());
   }, []);
 
+  const refreshMotifFolderExists = useCallback(async () => {
+    setMotifFolderExists(await hasMotifMusicFolder());
+  }, []);
+
   useEffect(() => {
     refreshFolders();
     refreshCount();
-    getSetting('scanMode', 'manual').then(setScanModeState);
-    getSetting('autoRemoveMissing', false).then(setAutoRemoveMissingState);
-  }, [refreshFolders, refreshCount]);
+    refreshMotifFolderExists();
+    getSetting("scanMode", "manual").then(setScanModeState);
+    getSetting("autoRemoveMissing", false).then(setAutoRemoveMissingState);
+  }, [refreshFolders, refreshCount, refreshMotifFolderExists]);
 
   // Any out-of-band library mutation (AudioEngine marking/removing a
   // missing file, a background scan) bumps version and refreshes the count
   // without those non-React modules needing to know about this context.
-  useEffect(() => onLibraryChanged(() => {
-    refreshCount();
-    setVersion((v) => v + 1);
-  }), [refreshCount]);
-
-  const addFolder = useCallback(async () => {
-    await addLibraryFolder();
-    await refreshFolders();
-    await scan();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshFolders]);
-
-  const removeFolder = useCallback(
-    async (id) => {
-      const folder = folders.find((f) => f.id === id);
-      await removeLibraryFolder(id);
-      await refreshFolders();
-      await refreshCount();
-      setVersion((v) => v + 1);
-      if (folder) pushToast(`Disconnected “${folder.name}”`);
-    },
-    [folders, refreshFolders, refreshCount]
+  useEffect(
+    () =>
+      onLibraryChanged(() => {
+        refreshCount();
+        setVersion((v) => v + 1);
+      }),
+    [refreshCount],
   );
 
   const scan = useCallback(async () => {
@@ -77,9 +78,11 @@ export function LibraryProvider({ children }) {
     const totals = { created: 0, updated: 0, removed: 0 };
     try {
       const result = await scanAllFolders({
-        onFolderStart: (folder) => setScanProgress({ folder: folder.name, ...{ scanned: 0 } }),
-        onProgress: (folder, progress) => setScanProgress({ folder: folder.name, ...progress }),
-        onFolderDone: () => {}
+        onFolderStart: (folder) =>
+          setScanProgress({ folder: folder.name, ...{ scanned: 0 } }),
+        onProgress: (folder, progress) =>
+          setScanProgress({ folder: folder.name, ...progress }),
+        onFolderDone: () => {},
       });
       Object.assign(totals, result);
     } finally {
@@ -91,38 +94,89 @@ export function LibraryProvider({ children }) {
       const removed = totals.removed || 0;
       if (added || removed) {
         const parts = [];
-        if (added) parts.push(`${added} song${added === 1 ? '' : 's'} added`);
+        if (added) parts.push(`${added} song${added === 1 ? "" : "s"} added`);
         if (removed) parts.push(`${removed} removed`);
-        pushToast(parts.join(', '), { type: added ? 'success' : 'info' });
+        pushToast(parts.join(", "), { type: added ? "success" : "info" });
       }
     }
   }, [refreshCount]);
 
+  const addFolder = useCallback(async () => {
+    try {
+      await addLibraryFolder();
+    } catch (err) {
+      if (err instanceof DuplicateFolderError) {
+        pushToast(`“${err.existingFolder.name}” is already connected.`, {
+          type: "info",
+        });
+        return;
+      }
+      if (err?.name === "AbortError") return;
+      pushToast(err.message || "Could not connect that folder.", {
+        type: "error",
+      });
+      return;
+    }
+    await refreshFolders();
+    await refreshMotifFolderExists();
+    await scan();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshFolders, refreshMotifFolderExists]);
+
+  const createMotifFolder = useCallback(async () => {
+    try {
+      await createMotifMusicFolder();
+    } catch (err) {
+      if (err?.name === "AbortError") return;
+      pushToast(err.message || "Could not create the Motif Music folder.", {
+        type: "error",
+      });
+      return;
+    }
+    await refreshFolders();
+    await refreshMotifFolderExists();
+    await scan();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshFolders, refreshMotifFolderExists]);
+
+  const removeFolder = useCallback(
+    async (id) => {
+      const folder = folders.find((f) => f.id === id);
+      await removeLibraryFolder(id);
+      await refreshFolders();
+      await refreshCount();
+      await refreshMotifFolderExists();
+      setVersion((v) => v + 1);
+      if (folder) pushToast(`Disconnected “${folder.name}”`);
+    },
+    [folders, refreshFolders, refreshCount, refreshMotifFolderExists],
+  );
+
   const setScanMode = useCallback(async (mode) => {
-    if (mode === 'watch' && !isWatchSupported()) {
-      pushToast('This browser doesn’t support filesystem watching yet — try an interval instead.', { type: 'error' });
+    if (mode === "watch" && !isWatchSupported()) {
+      pushToast(
+        "This browser doesn’t support filesystem watching yet — try an interval instead.",
+        { type: "error" },
+      );
       return;
     }
     setScanModeState(mode);
-    await setSetting('scanMode', mode);
+    await setSetting("scanMode", mode);
   }, []);
 
   const setAutoRemoveMissing = useCallback(async (value) => {
     setAutoRemoveMissingState(value);
-    await setSetting('autoRemoveMissing', value);
+    await setSetting("autoRemoveMissing", value);
   }, []);
 
-  // "On application startup" — fires once per app session, only if there's
-  // actually a library to check.
   useEffect(() => {
     if (didStartupScan.current) return;
-    if (scanMode === 'startup' && folders.length > 0) {
+    if (scanMode === "startup" && folders.length > 0) {
       didStartupScan.current = true;
       scan();
     }
   }, [scanMode, folders, scan]);
 
-  // Periodic rescans while the app stays open.
   useEffect(() => {
     const ms = INTERVAL_MS[scanMode];
     if (!ms) return;
@@ -133,13 +187,15 @@ export function LibraryProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scanMode]);
 
-  // Best-effort live filesystem watching (experimental — see watchFolders.js).
   useEffect(() => {
-    if (scanMode !== 'watch' || folders.length === 0) return;
+    if (scanMode !== "watch" || folders.length === 0) return;
     const cleanup = watchFolders(folders, () => scan(), {
       onUnsupported: () => {
-        pushToast('Filesystem watching isn’t available here — falling back to manual scans.', { type: 'error' });
-      }
+        pushToast(
+          "Filesystem watching isn’t available here — falling back to manual scans.",
+          { type: "error" },
+        );
+      },
     });
     return cleanup;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -157,16 +213,20 @@ export function LibraryProvider({ children }) {
     setScanMode,
     autoRemoveMissing,
     setAutoRemoveMissing,
+    motifFolderExists,
+    createMotifFolder,
     addFolder,
     removeFolder,
-    rescan: scan
+    rescan: scan,
   };
 
-  return <LibraryContext.Provider value={value}>{children}</LibraryContext.Provider>;
+  return (
+    <LibraryContext.Provider value={value}>{children}</LibraryContext.Provider>
+  );
 }
 
 export function useLibrary() {
   const ctx = useContext(LibraryContext);
-  if (!ctx) throw new Error('useLibrary must be used within <LibraryProvider>');
+  if (!ctx) throw new Error("useLibrary must be used within <LibraryProvider>");
   return ctx;
 }

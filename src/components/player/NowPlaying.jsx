@@ -18,10 +18,6 @@ import { Artwork } from "../common/Artwork.jsx";
 import { LyricsView } from "./LyricsView.jsx";
 import { formatDuration } from "../../utils/formatTime.js";
 
-// Stops a drag control (seek bar, volume slider) from also being read as a
-// screen-wide swipe. react-swipeable tracks touch/mouse activity directly
-// on the container it's spread onto, so both are opted out here — not
-// pointer events, which is a separate event family it doesn't listen to.
 const isolateDrag = {
   onTouchStart: (e) => e.stopPropagation(),
   onMouseDown: (e) => e.stopPropagation(),
@@ -57,11 +53,6 @@ export function NowPlaying() {
   const { shouldRender, entered } = useMountTransition(nowPlayingOpen, 320);
   const smoothTime = useSmoothProgress(currentTime, isPlaying, playbackRate);
 
-  // Once the engine confirms the seeked position (currentTime catches up,
-  // via the 'seeked' listener or the next timeupdate tick), release the
-  // local drag override so the smoothed value takes over again. Without
-  // this, clearing dragValue immediately on release can flash the old
-  // pre-seek position for a frame before the new one arrives.
   useEffect(() => {
     if (dragValue !== null && !draggingRef.current) {
       setDragValue(null);
@@ -83,10 +74,19 @@ export function NowPlaying() {
   const displayedTime = dragValue ?? smoothTime;
   const lyricsUnavailable = current.lyrics === false;
 
-  const handleSeekPointerDown = () => {
+  // Pointer capture keeps every subsequent pointermove/pointerup routed to
+  // this exact element for the life of the gesture, even once the
+  // finger/cursor drifts outside the input's bounding box — without it,
+  // a drag that leaves the input area can silently stop being tracked.
+  const handleSeekPointerDown = (e) => {
     draggingRef.current = true;
     setDragValue(smoothTime);
     beginScrub();
+    try {
+      e.target.setPointerCapture(e.pointerId);
+    } catch {
+      // Pointer capture unsupported — drag still works via native range behavior.
+    }
   };
 
   const handleSeekInput = (e) => {
@@ -97,11 +97,14 @@ export function NowPlaying() {
     if (!draggingRef.current) return;
     draggingRef.current = false;
     endScrub(Number(e.target.value));
+    try {
+      e.target.releasePointerCapture(e.pointerId);
+    } catch {
+      // Already released or unsupported — nothing to clean up.
+    }
   };
 
   const handleSeekChange = (e) => {
-    // Arrow-key seeking never fires a pointer event, so this is the only
-    // signal for a keyboard-driven change — commit it directly.
     if (!draggingRef.current) {
       seek(Number(e.target.value));
     }
