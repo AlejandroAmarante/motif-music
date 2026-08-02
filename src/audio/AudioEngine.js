@@ -1,19 +1,36 @@
-import { Queue } from './queue.js';
-import { resolveFile } from '../library/resolveFile.js';
-import { recordPlay } from '../db/songsRepo.js';
-import { updateMediaSessionMetadata, updatePlaybackState, updatePositionState } from './mediaSession.js';
-import { pushToast } from '../state/toastBus.js';
-import { handleLoadFailure, handleLoadSuccess } from '../library/missingFiles.js';
+import { Queue } from "./queue.js";
+import { resolveFile } from "../library/resolveFile.js";
+import { recordPlay, setLyrics } from "../db/songsRepo.js";
+import {
+  updateMediaSessionMetadata,
+  updatePlaybackState,
+  updatePositionState,
+} from "./mediaSession.js";
+import { pushToast } from "../state/toastBus.js";
+import {
+  handleLoadFailure,
+  handleLoadSuccess,
+} from "../library/missingFiles.js";
+import { fetchLrclibLyrics } from "../library/lrclib.js";
 
 const MAX_CONSECUTIVE_FAILURES = 8;
 
 export class AudioEngine {
   constructor() {
     this.audio = new Audio();
-    this.audio.preload = 'auto';
+    this.audio.preload = "auto";
     this.queue = new Queue();
     this._objectUrl = null;
+    // `_loading` hides stale time/duration during an actual track switch.
+    // `_buffering` drives the spinner only — it also fires on ordinary
+    // mid-track stalls and on every seek (the element briefly rebuffers at
+    // the new position), so it must never be the thing that zeroes time,
+    // or seeking visibly snaps the display back to 00:00.
+    this._loading = false;
     this._buffering = false;
+    this._scrubbing = false;
+    this._wasPlayingBeforeScrub = false;
+    this._lyricsRecheckedThisTrack = false;
     this._countedThisTrack = false;
     this._consecutiveFailures = 0;
     this._listeners = new Set();
@@ -41,13 +58,15 @@ export class AudioEngine {
       queueIndex: this.queue.index,
       isPlaying: !this.audio.paused && !this.audio.ended,
       buffering: this._buffering,
-      currentTime: this._buffering ? 0 : this.audio.currentTime || 0,
-      duration: this._buffering ? song?.duration || 0 : this.audio.duration || song?.duration || 0,
+      currentTime: this._loading ? 0 : this.audio.currentTime || 0,
+      duration: this._loading
+        ? song?.duration || 0
+        : this.audio.duration || song?.duration || 0,
       volume: this.audio.volume,
       muted: this.audio.muted,
       playbackRate: this.audio.playbackRate,
       shuffle: this.queue.shuffle,
-      repeatMode: this.queue.repeatMode
+      repeatMode: this.queue.repeatMode,
     };
   }
 
@@ -60,13 +79,13 @@ export class AudioEngine {
   async _loadCurrent() {
     const song = this.queue.current();
     if (!song) return;
+    this._loading = true;
     this._buffering = true;
     this._countedThisTrack = false;
+    this._lyricsRecheckedThisTrack = false;
     this._emit();
     try {
       if (song.sampleUrl) {
-        // Bundled demo tracks are static assets, not user files — no File
-        // System Access resolution or object URL bookkeeping needed.
         if (this._objectUrl) {
           URL.revokeObjectURL(this._objectUrl);
           this._objectUrl = null;
@@ -84,30 +103,26 @@ export class AudioEngine {
     } catch (err) {
       await this._handleFailure(song, err);
     } finally {
+      this._loading = false;
       this._buffering = false;
       this._emit();
     }
   }
 
-  /** Shared by resolveFile() failures and native <audio> 'error' events — always a safe, capped skip. */
   async _handleFailure(song, err) {
-    console.error('[motif/audio] could not load', song?.title, err);
-    pushToast(`Couldn't play "${song.title}" — skipping`, { type: 'error' });
+    console.error("[motif/audio] could not load", song?.title, err);
+    pushToast(`Couldn't play "${song.title}" — skipping`, { type: "error" });
     handleLoadFailure(song).catch(() => {});
     this._consecutiveFailures += 1;
     if (this._consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
       this._consecutiveFailures = 0;
-      pushToast('Too many tracks failed to load — stopping', { type: 'error' });
+      pushToast("Too many tracks failed to load — stopping", { type: "error" });
       this.pause();
       return;
     }
     await this._forceNext();
   }
 
-  /**
-   * Advances past a track that just failed to load, ignoring repeat-one —
-   * retrying the same broken file forever would hang instead of skipping.
-   */
   async _forceNext() {
     const next = this.queue.forceAdvance();
     if (next) {
@@ -122,7 +137,10 @@ export class AudioEngine {
     try {
       await this.audio.play();
     } catch (err) {
-      console.warn('[motif/audio] play() rejected (likely needs a user gesture):', err.message);
+      console.warn(
+        "[motif/audio] play() rejected (likely needs a user gesture):",
+        err.message,
+      );
     }
   }
 
@@ -137,6 +155,24 @@ export class AudioEngine {
 
   seek(time) {
     if (Number.isFinite(time)) this.audio.currentTime = time;
+  }
+
+  /**
+   * Begins a seek-bar drag: pauses outright so nothing plays audibly while
+   * the user drags. Visual position during the drag lives entirely in the
+   * UI's local state — this never touches audio.currentTime mid-drag.
+   */
+  beginScrub() {
+    this._scrubbing = true;
+    this._wasPlayingBeforeScrub = !this.audio.paused;
+    this.audio.pause();
+  }
+
+  /** Commits the drag: seeks to the released position, resumes if it was playing before the drag started. */
+  endScrub(time) {
+    this._scrubbing = false;
+    this.seek(time);
+    if (this._wasPlayingBeforeScrub) this.play();
   }
 
   setVolume(v) {
@@ -204,42 +240,80 @@ export class AudioEngine {
     this.queue.removeAt(orderPosition);
   }
 
+  /**
+   * Lyrics previously confirmed absent (`song.lyrics === false`) get one
+   * re-check per play, fired only once actual playback starts — never as
+   * a background scan — out of respect for LRCLIB. A found result is
+   * cached the same way LyricsView's own on-demand lookup is, and emitted
+   * so the Lyrics button can re-enable itself without the panel being
+   * reopened.
+   */
+  async _maybeRecheckLyrics() {
+    const song = this.queue.current();
+    if (
+      !song ||
+      song.sampleUrl ||
+      song.lyrics !== false ||
+      this._lyricsRecheckedThisTrack
+    )
+      return;
+    this._lyricsRecheckedThisTrack = true;
+    const result = await fetchLrclibLyrics({
+      title: song.title,
+      artist: song.artist,
+      album: song.album,
+      duration: song.duration,
+    });
+    if (result && result !== false) {
+      song.lyrics = result;
+      setLyrics(song.id, result).catch(() => {});
+      this._emit();
+    }
+    // `false` (still confirmed absent) or `null` (lookup failed) — leave
+    // the cached state as-is; either way we'll just try again next play.
+  }
+
   _bindAudioEvents() {
-    this.audio.addEventListener('play', () => {
-      updatePlaybackState('playing');
+    this.audio.addEventListener("play", () => {
+      updatePlaybackState("playing");
+      this._maybeRecheckLyrics();
       this._emit();
     });
-    this.audio.addEventListener('pause', () => {
-      updatePlaybackState('paused');
+    this.audio.addEventListener("pause", () => {
+      updatePlaybackState("paused");
       this._emit();
     });
-    this.audio.addEventListener('timeupdate', () => {
+    this.audio.addEventListener("timeupdate", () => {
       this._maybeRecordPlay();
       updatePositionState({
         duration: this.audio.duration,
         position: this.audio.currentTime,
-        playbackRate: this.audio.playbackRate
+        playbackRate: this.audio.playbackRate,
       });
       this._emit();
     });
-    this.audio.addEventListener('waiting', () => {
+    this.audio.addEventListener("waiting", () => {
       this._buffering = true;
       this._emit();
     });
-    this.audio.addEventListener('canplay', () => {
+    this.audio.addEventListener("canplay", () => {
       this._buffering = false;
       this._emit();
     });
-    this.audio.addEventListener('ended', () => {
+    this.audio.addEventListener("seeked", () => {
+      // Confirms the post-seek position immediately rather than waiting on
+      // the next (possibly sparse) timeupdate tick — see beginScrub/endScrub.
+      this._emit();
+    });
+    this.audio.addEventListener("ended", () => {
       this._maybeRecordSkip();
       this.next();
     });
-    this.audio.addEventListener('error', () => {
+    this.audio.addEventListener("error", () => {
       this._handleFailure(this.queue.current(), this.audio.error);
     });
   }
 
-  /** Counts a play once listened past 50% of duration or 30s, whichever is shorter. */
   _maybeRecordPlay() {
     if (this._countedThisTrack) return;
     const threshold = Math.min(30, (this.audio.duration || 0) / 2);

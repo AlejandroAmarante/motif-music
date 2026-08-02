@@ -1,29 +1,37 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { search } from '../search/searchIndex.js';
-import { useLibrary } from '../state/LibraryContext.jsx';
-import { usePlayer } from '../state/PlayerContext.jsx';
-import { Artwork } from '../components/common/Artwork.jsx';
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Search } from "lucide-react";
+import { search } from "../search/searchIndex.js";
+import { useLibrary } from "../state/LibraryContext.jsx";
+import { usePlayer } from "../state/PlayerContext.jsx";
+import { Artwork } from "../components/common/Artwork.jsx";
 
-const RECENTS_KEY = 'motif:recentSearches';
+const RECENTS_KEY = "motif:recentSearches";
 const MAX_RECENTS = 8;
 
 function loadRecents() {
   try {
-    return JSON.parse(sessionStorage.getItem(RECENTS_KEY) || '[]');
+    return JSON.parse(sessionStorage.getItem(RECENTS_KEY) || "[]");
   } catch {
     return [];
   }
 }
 
 function saveRecents(list) {
-  sessionStorage.setItem(RECENTS_KEY, JSON.stringify(list.slice(0, MAX_RECENTS)));
+  sessionStorage.setItem(
+    RECENTS_KEY,
+    JSON.stringify(list.slice(0, MAX_RECENTS)),
+  );
 }
 
 export function SearchView() {
   const { version } = useLibrary();
   const { playSongs } = usePlayer();
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState({ songs: [], artists: [], albums: [] });
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState({
+    songs: [],
+    artists: [],
+    albums: [],
+  });
   const [recents, setRecents] = useState(loadRecents);
   const debounceRef = useRef(null);
 
@@ -42,7 +50,10 @@ export function SearchView() {
   const commitRecent = useCallback((term) => {
     if (!term.trim()) return;
     setRecents((prev) => {
-      const next = [term, ...prev.filter((t) => t !== term)].slice(0, MAX_RECENTS);
+      const next = [term, ...prev.filter((t) => t !== term)].slice(
+        0,
+        MAX_RECENTS,
+      );
       saveRecents(next);
       return next;
     });
@@ -61,7 +72,7 @@ export function SearchView() {
 
       <div className="library-view__search">
         <div className="search-view__input-wrap">
-          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="10.5" cy="10.5" r="6.5" /><line x1="20" y1="20" x2="15.3" y2="15.3" /></svg>
+          <Search size={17} strokeWidth={2} />
           <input
             className="search-view__input"
             type="search"
@@ -80,7 +91,11 @@ export function SearchView() {
           <section className="search-view__recents">
             <h2 className="home-rail__title">Recent searches</h2>
             {recents.map((term) => (
-              <button key={term} className="search-view__recent-item" onClick={() => setQuery(term)}>
+              <button
+                key={term}
+                className="search-view__recent-item"
+                onClick={() => setQuery(term)}
+              >
                 {term}
               </button>
             ))}
@@ -91,11 +106,24 @@ export function SearchView() {
           <section>
             <h2 className="home-rail__title">Songs</h2>
             {results.songs.map((song) => (
-              <div key={song.id} className="search-result" onClick={() => playSong(song)} role="button" tabIndex={0}>
-                <Artwork artworkId={song.artworkId} alt="" className="search-result__art" />
+              <div
+                key={song.id}
+                className="search-result"
+                onClick={() => playSong(song)}
+                role="button"
+                tabIndex={0}
+              >
+                <Artwork
+                  artworkId={song.artworkId}
+                  alt=""
+                  className="search-result__art"
+                />
                 <div className="song-row__text">
                   <p className="song-row__title">{song.title}</p>
-                  <p className="song-row__artist">{song.artist}{song.album ? ` · ${song.album}` : ''}</p>
+                  <p className="song-row__artist">
+                    {song.artist}
+                    {song.album ? ` · ${song.album}` : ""}
+                  </p>
                 </div>
               </div>
             ))}
@@ -106,7 +134,10 @@ export function SearchView() {
           <section>
             <h2 className="home-rail__title">Artists</h2>
             {results.artists.map((artist) => (
-              <div key={artist.id} className="search-result search-result--text">
+              <div
+                key={artist.id}
+                className="search-result search-result--text"
+              >
                 {artist.name}
               </div>
             ))}
@@ -124,9 +155,14 @@ export function SearchView() {
           </section>
         )}
 
-        {query.trim() && !results.songs.length && !results.artists.length && !results.albums.length && (
-          <p className="search-view__empty">No matches for "{query}" in your library.</p>
-        )}
+        {query.trim() &&
+          !results.songs.length &&
+          !results.artists.length &&
+          !results.albums.length && (
+            <p className="search-view__empty">
+              No matches for "{query}" in your library.
+            </p>
+          )}
       </div>
     </div>
   );

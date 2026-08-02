@@ -14,7 +14,9 @@
     "music-metadata": "^10.9.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-window": "^1.8.10"
+    "react-window": "^1.8.10",
+    "lucide-react": "^1.28.0",
+    "react-swipeable": "^7.0.2"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",

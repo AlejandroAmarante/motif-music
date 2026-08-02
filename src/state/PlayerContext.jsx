@@ -1,6 +1,13 @@
-import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
-import { AudioEngine } from '../audio/AudioEngine.js';
-import { setupMediaSession } from '../audio/mediaSession.js';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
+import { AudioEngine } from "../audio/AudioEngine.js";
+import { setupMediaSession } from "../audio/mediaSession.js";
 
 const PlayerContext = createContext(null);
 
@@ -17,7 +24,10 @@ export function PlayerProvider({ children }) {
     return engine.onChange(setState);
   }, [engine]);
 
-  const playSongs = useCallback((songs, startAt = 0) => engine.playQueue(songs, startAt), [engine]);
+  const playSongs = useCallback(
+    (songs, startAt = 0) => engine.playQueue(songs, startAt),
+    [engine],
+  );
 
   const value = {
     engine,
@@ -27,6 +37,8 @@ export function PlayerProvider({ children }) {
     next: () => engine.next(),
     previous: () => engine.previous(),
     seek: (t) => engine.seek(t),
+    beginScrub: () => engine.beginScrub(),
+    endScrub: (t) => engine.endScrub(t),
     setVolume: (v) => engine.setVolume(v),
     toggleMute: () => engine.toggleMute(),
     setPlaybackRate: (r) => engine.setPlaybackRate(r),
@@ -38,14 +50,16 @@ export function PlayerProvider({ children }) {
     removeFromQueue: (pos) => engine.removeFromQueue(pos),
     nowPlayingOpen,
     openNowPlaying: () => setNowPlayingOpen(true),
-    closeNowPlaying: () => setNowPlayingOpen(false)
+    closeNowPlaying: () => setNowPlayingOpen(false),
   };
 
-  return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
+  return (
+    <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>
+  );
 }
 
 export function usePlayer() {
   const ctx = useContext(PlayerContext);
-  if (!ctx) throw new Error('usePlayer must be used within <PlayerProvider>');
+  if (!ctx) throw new Error("usePlayer must be used within <PlayerProvider>");
   return ctx;
 }

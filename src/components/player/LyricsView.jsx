@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useMountTransition } from '../../utils/useMountTransition.js';
-import { fetchLrclibLyrics } from '../../library/lrclib.js';
-import { setLyrics } from '../../db/songsRepo.js';
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
+import { useMountTransition } from "../../utils/useMountTransition.js";
+import { fetchLrclibLyrics } from "../../library/lrclib.js";
+import { setLyrics } from "../../db/songsRepo.js";
 
 function activeLineIndex(synced, currentTime) {
   if (!synced?.length) return -1;
@@ -16,51 +17,61 @@ function activeLineIndex(synced, currentTime) {
 export function LyricsView({ isOpen, onClose, song, currentTime, onSeekTo }) {
   const { shouldRender, entered } = useMountTransition(isOpen, 260);
   const lineRefs = useRef([]);
-  const [fetchState, setFetchState] = useState('idle'); // 'idle' | 'loading' | 'done'
+  const [fetchState, setFetchState] = useState("idle"); // 'idle' | 'loading' | 'done'
 
-  // song.lyrics is null/undefined the first time we ever look at a track
-  // with no local (.lrc or embedded) lyrics — fall back to LRCLIB exactly
-  // once, then cache the result (found, or confirmed absent) on the song
-  // record so we never ask twice for the same track.
   useEffect(() => {
     if (!isOpen || !song || song.lyrics != null) {
-      setFetchState('idle');
+      setFetchState("idle");
       return undefined;
     }
     let cancelled = false;
-    setFetchState('loading');
-    fetchLrclibLyrics({ title: song.title, artist: song.artist, album: song.album, duration: song.duration }).then(
-      (result) => {
-        if (cancelled) return;
-        if (result !== null) {
-          song.lyrics = result; // mutate the in-memory queue object too, so re-opening this session doesn't re-fetch
-          setLyrics(song.id, result).catch(() => {});
-        }
-        setFetchState('done');
+    setFetchState("loading");
+    fetchLrclibLyrics({
+      title: song.title,
+      artist: song.artist,
+      album: song.album,
+      duration: song.duration,
+    }).then((result) => {
+      if (cancelled) return;
+      if (result !== null) {
+        song.lyrics = result;
+        setLyrics(song.id, result).catch(() => {});
       }
-    );
+      setFetchState("done");
+    });
     return () => {
       cancelled = true;
     };
   }, [isOpen, song]);
 
   const synced = song?.lyrics?.synced ?? null;
-  const activeIdx = useMemo(() => activeLineIndex(synced, currentTime), [synced, currentTime]);
+  const activeIdx = useMemo(
+    () => activeLineIndex(synced, currentTime),
+    [synced, currentTime],
+  );
 
   useEffect(() => {
     if (activeIdx < 0) return;
-    lineRefs.current[activeIdx]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    lineRefs.current[activeIdx]?.scrollIntoView({
+      block: "center",
+      behavior: "smooth",
+    });
   }, [activeIdx]);
 
   if (!shouldRender || !song) return null;
 
-  const notFound = song.lyrics === false || (fetchState === 'done' && song.lyrics == null);
+  const notFound =
+    song.lyrics === false || (fetchState === "done" && song.lyrics == null);
 
   return (
-    <div className={`lyrics-view${entered ? ' is-open' : ''}`}>
+    <div className={`lyrics-view${entered ? " is-open" : ""}`}>
       <div className="now-playing__handle-zone">
-        <button className="now-playing__collapse" onClick={onClose} aria-label="Close lyrics">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="6 9 12 15 18 9" /></svg>
+        <button
+          className="now-playing__collapse"
+          onClick={onClose}
+          aria-label="Close lyrics"
+        >
+          <ChevronDown size={22} strokeWidth={2} />
         </button>
         <span className="now-playing__eyebrow">Lyrics</span>
         <div style={{ width: 22 }} />
@@ -70,13 +81,15 @@ export function LyricsView({ isOpen, onClose, song, currentTime, onSeekTo }) {
         <p className="lyrics-view__heading">{song.title}</p>
         <p className="lyrics-view__subheading">{song.artist}</p>
 
-        {fetchState === 'loading' && <p className="lyrics-view__status">Looking for lyrics…</p>}
+        {fetchState === "loading" && (
+          <p className="lyrics-view__status">Looking for lyrics…</p>
+        )}
 
-        {fetchState !== 'loading' && notFound && (
+        {fetchState !== "loading" && notFound && (
           <p className="lyrics-view__status">No lyrics found for this track.</p>
         )}
 
-        {fetchState !== 'loading' &&
+        {fetchState !== "loading" &&
           !notFound &&
           (synced ? (
             <div className="lyrics-view__lines">
@@ -84,7 +97,7 @@ export function LyricsView({ isOpen, onClose, song, currentTime, onSeekTo }) {
                 <p
                   key={`${line.time}-${i}`}
                   ref={(el) => (lineRefs.current[i] = el)}
-                  className={`lyrics-view__line${i === activeIdx ? ' is-active' : ''}`}
+                  className={`lyrics-view__line${i === activeIdx ? " is-active" : ""}`}
                   onClick={() => onSeekTo(line.time)}
                   role="button"
                   tabIndex={0}

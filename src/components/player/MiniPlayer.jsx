@@ -1,17 +1,30 @@
-import { usePlayer } from '../../state/PlayerContext.jsx';
-import { useSwipe } from '../../utils/useSwipe.js';
-import { useSmoothProgress } from '../../utils/useSmoothProgress.js';
-import { Artwork } from '../common/Artwork.jsx';
+import { useSwipeable } from "react-swipeable";
+import { Play, Pause } from "lucide-react";
+import { usePlayer } from "../../state/PlayerContext.jsx";
+import { useSmoothProgress } from "../../utils/useSmoothProgress.js";
+import { Artwork } from "../common/Artwork.jsx";
 
 export function MiniPlayer() {
-  const { current, isPlaying, buffering, currentTime, duration, playbackRate, toggle, next, previous, openNowPlaying } =
-    usePlayer();
+  const {
+    current,
+    isPlaying,
+    buffering,
+    currentTime,
+    duration,
+    playbackRate,
+    toggle,
+    next,
+    previous,
+    openNowPlaying,
+  } = usePlayer();
 
-  const swipeHandlers = useSwipe({
-    onSwipeUp: openNowPlaying,
-    onSwipeLeft: next,
-    onSwipeRight: previous,
-    onTap: openNowPlaying
+  const swipeHandlers = useSwipeable({
+    onSwipedUp: openNowPlaying,
+    onSwipedLeft: next,
+    onSwipedRight: previous,
+    trackMouse: true,
+    preventScrollOnSwipe: true,
+    delta: 40,
   });
 
   const smoothTime = useSmoothProgress(currentTime, isPlaying, playbackRate);
@@ -21,29 +34,49 @@ export function MiniPlayer() {
   const progress = duration > 0 ? Math.min(1, smoothTime / duration) : 0;
 
   return (
-    <div className="mini-player" role="button" tabIndex={0} aria-label={`Now playing: ${current.title}. Tap to expand.`} {...swipeHandlers}>
-      <div className="mini-player__progress" style={{ transform: `scaleX(${progress})` }} />
-      <Artwork artworkId={current.artworkId} alt="" className="mini-player__art" playing={isPlaying} />
+    <div
+      className="mini-player"
+      role="button"
+      tabIndex={0}
+      aria-label={`Now playing: ${current.title}. Tap to expand.`}
+      onClick={openNowPlaying}
+      {...swipeHandlers}
+    >
+      <div
+        className="mini-player__progress"
+        style={{ transform: `scaleX(${progress})` }}
+      />
+      <Artwork
+        artworkId={current.artworkId}
+        alt=""
+        className="mini-player__art"
+        playing={isPlaying}
+      />
       <div className="mini-player__text">
         <p className="mini-player__title">{current.title}</p>
         <p className="mini-player__artist">{current.artist}</p>
       </div>
       <button
         className="mini-player__play"
-        aria-label={isPlaying ? 'Pause' : 'Play'}
-        onPointerDown={(e) => e.stopPropagation()}
-        onPointerUp={(e) => e.stopPropagation()}
+        aria-label={isPlaying ? "Pause" : "Play"}
+        onTouchStart={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation();
           toggle();
         }}
       >
         {buffering ? (
-          <span className="motif-mark pulse" aria-hidden="true"><span /><span /><span /><span /></span>
+          <span className="motif-mark pulse" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+            <span />
+          </span>
         ) : isPlaying ? (
-          <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
+          <Pause size={26} fill="currentColor" />
         ) : (
-          <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor"><path d="M7 5.5v13l11-6.5z" /></svg>
+          <Play size={26} fill="currentColor" />
         )}
       </button>
     </div>

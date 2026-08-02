@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
-import { useMountTransition } from '../utils/useMountTransition.js';
-import { usePlayer } from '../state/PlayerContext.jsx';
-import { SAMPLE_TRACKS } from '../library/sampleTracks.js';
+import { useEffect, useState } from "react";
+import { ChevronDown } from "lucide-react";
+import { useMountTransition } from "../utils/useMountTransition.js";
+import { usePlayer } from "../state/PlayerContext.jsx";
+import { SAMPLE_TRACKS } from "../library/sampleTracks.js";
 
 function useStorageEstimate() {
   const [estimate, setEstimate] = useState(null);
@@ -14,7 +15,7 @@ function useStorageEstimate() {
 }
 
 function formatBytes(bytes) {
-  if (!bytes) return '0 MB';
+  if (!bytes) return "0 MB";
   const mb = bytes / (1024 * 1024);
   if (mb > 1024) return `${(mb / 1024).toFixed(1)} GB`;
   return `${mb.toFixed(0)} MB`;
@@ -28,10 +29,14 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
   if (!shouldRender) return null;
 
   return (
-    <div className={`settings-overlay${entered ? ' is-open' : ''}`}>
+    <div className={`settings-overlay${entered ? " is-open" : ""}`}>
       <div className="now-playing__handle-zone">
-        <button className="now-playing__collapse" onClick={onClose} aria-label="Close settings">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="6 9 12 15 18 9" /></svg>
+        <button
+          className="now-playing__collapse"
+          onClick={onClose}
+          aria-label="Close settings"
+        >
+          <ChevronDown size={22} strokeWidth={2} />
         </button>
         <span className="now-playing__eyebrow">Settings</span>
         <div style={{ width: 22 }} />
@@ -40,7 +45,10 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
       <div className="view__scroll scroll-region settings-overlay__body">
         <section>
           <h2 className="home-rail__title">Library</h2>
-          <button className="settings-overlay__sample-btn" onClick={onOpenFolders}>
+          <button
+            className="settings-overlay__sample-btn"
+            onClick={onOpenFolders}
+          >
             Manage connected folders
           </button>
         </section>
@@ -49,28 +57,36 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
           <section>
             <h2 className="home-rail__title">Storage</h2>
             <p className="settings-overlay__storage mono">
-              {formatBytes(estimate.usage)} used of {formatBytes(estimate.quota)} available
+              {formatBytes(estimate.usage)} used of{" "}
+              {formatBytes(estimate.quota)} available
             </p>
             <p className="settings-overlay__note">
-              This is metadata, artwork, and app cache only — your audio files stay on disk and are never copied.
+              This is metadata, artwork, and app cache only — your audio files
+              stay on disk and are never copied.
             </p>
           </section>
         )}
 
         <section>
           <h2 className="home-rail__title">Test playback</h2>
-          <button className="settings-overlay__sample-btn" onClick={() => playSongs(SAMPLE_TRACKS, 0)}>
+          <button
+            className="settings-overlay__sample-btn"
+            onClick={() => playSongs(SAMPLE_TRACKS, 0)}
+          >
             Play sample tracks
           </button>
           <p className="settings-overlay__note">
-            Three short synthesized placeholder tones, generated locally — useful for confirming playback
-            works before connecting a real folder.
+            Three short synthesized placeholder tones, generated locally —
+            useful for confirming playback works before connecting a real
+            folder.
           </p>
         </section>
 
         <section>
           <h2 className="home-rail__title">About</h2>
-          <p className="settings-overlay__note">Local-first music. Your library, not a subscription.</p>
+          <p className="settings-overlay__note">
+            Local-first music. Your library, not a subscription.
+          </p>
         </section>
       </div>
     </div>
