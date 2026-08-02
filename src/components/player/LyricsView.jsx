@@ -17,7 +17,7 @@ function activeLineIndex(synced, currentTime) {
 export function LyricsView({ isOpen, onClose, song, currentTime, onSeekTo }) {
   const { shouldRender, entered } = useMountTransition(isOpen, 260);
   const lineRefs = useRef([]);
-  const [fetchState, setFetchState] = useState("idle"); // 'idle' | 'loading' | 'done'
+  const [fetchState, setFetchState] = useState("idle");
 
   useEffect(() => {
     if (!isOpen || !song || song.lyrics != null) {

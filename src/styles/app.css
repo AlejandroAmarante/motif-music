@@ -61,9 +61,7 @@
 .mini-player__art {
   width: 48px;
   height: 48px;
-  border-radius: var(--radius-sm);
   flex-shrink: 0;
-  object-fit: cover;
 }
 .mini-player__text {
   flex: 1;
@@ -94,9 +92,23 @@
   flex-shrink: 0;
 }
 
-.artwork {
-  background: var(--surface);
+/* ============================================================
+   Artwork — fallback glyph and loaded image are both always
+   mounted and stacked; the image crossfades in via opacity
+   instead of swapping element types on/off. See Artwork.jsx.
+   ============================================================ */
+.artwork-wrap {
+  position: relative;
+  display: block;
+  overflow: hidden;
   border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.artwork {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
 }
 .artwork--fallback {
@@ -106,11 +118,11 @@
   background: linear-gradient(155deg, var(--surface) 0%, var(--bg-elevated) 100%);
 }
 .artwork--loaded {
-  animation: artwork-fade-in 260ms var(--ease-standard);
+  opacity: 0;
+  transition: opacity 260ms var(--ease-standard);
 }
-@keyframes artwork-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+.artwork--loaded.is-visible {
+  opacity: 1;
 }
 
 /* ============================================================
@@ -369,12 +381,16 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: var(--thumb);
-  padding: calc(var(--safe-top) + 14px) 20px var(--space-3);
+  padding: calc(var(--safe-top) + 14px) 20px var(--space-2);
   flex-shrink: 0;
 }
 .view__header h1 {
   font-size: 26px;
+  /* Forces an identical header row height in every view, whether or not a
+     header-action button (50px) sits next to the title — without this,
+     a bare <h1> and an <h1>+button row end up different heights, so the
+     title sits at a different vertical position depending on the view. */
+  line-height: var(--thumb);
 }
 .view__header-action {
   width: var(--thumb);
@@ -393,7 +409,10 @@
 
 /* Home */
 .home-rail {
-  padding: var(--space-3) 0 var(--space-2);
+  /* No top padding here on purpose — .home-rail__title's own top padding
+     is the only spacing before the label. Having both compounds with
+     .view__header's bottom padding and reads as excessive gap. */
+  padding: 0 0 var(--space-2);
 }
 .home-rail__title {
   font-size: 19px;
@@ -771,8 +790,7 @@
 }
 
 /* ============================================================
-   Toasts — every entrance has a mirrored exit (keyframe in,
-   transition out), consistent with the app's motion language.
+   Toasts
    ============================================================ */
 .toast-host {
   position: fixed;
@@ -832,7 +850,7 @@
 .toggle-row__text {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 .toggle-row__label {
   font-size: 14.5px;

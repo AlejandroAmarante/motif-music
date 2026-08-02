@@ -8,7 +8,6 @@ import { findMusicBrainzArtwork } from "./providers/musicbrainzProvider.js";
 import { findDeezerArtwork } from "./providers/deezerProvider.js";
 import { findDiscogsArtwork } from "./providers/discogsProvider.js";
 import { pushToast } from "../state/toastBus.js";
-import { notifyLibraryChanged } from "../state/libraryBus.js";
 
 const FAILURE_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24h
 
@@ -63,11 +62,20 @@ export function prefetchAlbumArtwork(ctx) {
   resolveAlbumArtwork(ctx).catch(() => {});
 }
 
+/**
+ * Persists the resolved artworkId onto the album + its songs so a *future*
+ * fresh load skips the pipeline entirely. Deliberately does NOT broadcast
+ * any kind of "reload everything" signal — every live Artwork instance for
+ * this album already gets the result directly through its own call to
+ * resolveAlbumArtwork() above (same in-flight promise or a fresh cache
+ * hit), so a global invalidation was pure overhead: it was wiping and
+ * refetching the entire visible row cache for every song in the list, not
+ * just the one album that changed.
+ */
 async function backfillAlbum(albumId, artworkId) {
   if (!albumId || !artworkId) return;
   try {
     await applyArtworkToAlbum(albumId, artworkId);
-    notifyLibraryChanged(); // so Library/Home refresh and pick up the resolved artwork via the fast artworkId path
   } catch (err) {
     console.warn("[motif/artwork] failed to backfill album:", err.message);
   }
