@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, useEffect } from "react";
-import { FixedSizeList } from "react-window";
+import { List } from "react-window";
 import { useVirtualSongs } from "../../state/useVirtualSongs.js";
 import { getByIds } from "../../db/songsRepo.js";
 import { usePlayer } from "../../state/PlayerContext.jsx";
@@ -7,6 +7,20 @@ import { SongRow } from "./SongRow.jsx";
 
 const ROW_HEIGHT = 68;
 const PLAY_WINDOW = 300;
+
+function Row({ index, style, getRowAt, current, isPlaying, onPlay }) {
+  const song = getRowAt(index);
+  return (
+    <SongRow
+      style={style}
+      song={song}
+      index={index}
+      isPlaying={current?.id === song?.id}
+      activelyPlaying={isPlaying && current?.id === song?.id}
+      onPlay={onPlay}
+    />
+  );
+}
 
 export function SongList({
   version = 0,
@@ -37,14 +51,10 @@ export function SongList({
     return () => observer.disconnect();
   }, []);
 
-  const handleItemsRendered = useCallback(
-    ({ overscanStartIndex, overscanStopIndex }) => {
+  const handleRowsRendered = useCallback(
+    (_visibleRows, allRows) => {
       if (filtering) return;
-      // Only force a re-render if loadRange actually fetched something new —
-      // onItemsRendered fires on essentially every render pass, and this
-      // combined with PlayerContext's per-timeupdate re-renders was causing
-      // a visible re-render storm on every list while something played.
-      loadRange(overscanStartIndex, overscanStopIndex).then((loaded) => {
+      loadRange(allRows.startIndex, allRows.stopIndex).then((loaded) => {
         if (loaded) forceTick((t) => t + 1);
       });
     },
@@ -78,25 +88,14 @@ export function SongList({
   return (
     <div className="song-list" ref={containerRef}>
       {!effectiveLoading && (
-        <FixedSizeList
-          height={height}
-          width="100%"
-          itemCount={effectiveCount}
-          itemSize={ROW_HEIGHT}
-          overscanCount={12}
-          onItemsRendered={handleItemsRendered}
-        >
-          {({ index, style }) => (
-            <SongRow
-              style={style}
-              song={getRowAt(index)}
-              index={index}
-              isPlaying={current?.id === getRowAt(index)?.id}
-              activelyPlaying={isPlaying && current?.id === getRowAt(index)?.id}
-              onPlay={handlePlay}
-            />
-          )}
-        </FixedSizeList>
+        <List
+          rowComponent={Row}
+          rowCount={effectiveCount}
+          rowHeight={ROW_HEIGHT}
+          rowProps={{ getRowAt, current, isPlaying, onPlay: handlePlay }}
+          onRowsRendered={handleRowsRendered}
+          style={{ height, width: "100%" }}
+        />
       )}
     </div>
   );
