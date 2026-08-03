@@ -9,6 +9,12 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
+      // The app registers the service worker itself, in
+      // src/state/UpdateContext.jsx (via virtual:pwa-register/react), so it
+      // can expose manual "Check for Updates" + "Automatically check for
+      // updates" controls in Settings. Leaving this on would register a
+      // second, independent instance of the same worker.
+      injectRegister: false,
       includeAssets: ["icons/*.svg"],
       manifest: {
         name: "Motif — Local-First Music",

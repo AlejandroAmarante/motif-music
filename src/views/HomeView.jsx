@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Settings } from "lucide-react";
+import { Settings, History, Heart, TrendingUp } from "lucide-react";
 import { useLibrary } from "../state/LibraryContext.jsx";
 import { usePlayer } from "../state/PlayerContext.jsx";
 import {
@@ -9,11 +9,18 @@ import {
 } from "../db/songsRepo.js";
 import { Artwork } from "../components/common/Artwork.jsx";
 
-function Rail({ title, songs, onPlay }) {
+function Rail({ title, icon: Icon, songs, onPlay }) {
   if (!songs.length) return null;
   return (
     <section className="home-rail">
-      <h2 className="home-rail__title">{title}</h2>
+      <h2 className="home-rail__title">
+        {Icon && (
+          <span className="home-rail__icon" aria-hidden="true">
+            <Icon size={17} strokeWidth={1.8} />
+          </span>
+        )}
+        {title}
+      </h2>
       <div className="home-rail__scroll scroll-region">
         {songs.map((song, i) => (
           <button
@@ -82,15 +89,22 @@ export function HomeView({ onOpenSettings }) {
           <>
             <Rail
               title="Recently added"
+              icon={History}
               songs={rails.recent}
               onPlay={playSongs}
             />
             <Rail
               title="Favorites"
+              icon={Heart}
               songs={rails.favorites}
               onPlay={playSongs}
             />
-            <Rail title="Most played" songs={rails.top} onPlay={playSongs} />
+            <Rail
+              title="Most played"
+              icon={TrendingUp}
+              songs={rails.top}
+              onPlay={playSongs}
+            />
             <p className="home-view__note">
               Daily Mixes, Weekly Discovery, and Release Radar land once the
               recommendation engine is in place — for now, Home reflects your

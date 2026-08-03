@@ -22,6 +22,14 @@ function Row({ index, style, getRowAt, current, isPlaying, onPlay }) {
   );
 }
 
+/** Pulls a {startIndex, stopIndex} range out of whatever shape onRowsRendered was called with. */
+function normalizeRange(a, b) {
+  if (b && typeof b.startIndex === "number") return b;
+  if (a && typeof a.startIndex === "number") return a;
+  if (typeof a === "number") return { startIndex: a, stopIndex: typeof b === "number" ? b : a };
+  return null;
+}
+
 export function SongList({
   version = 0,
   sortIndex = "byTitleLower",
@@ -52,9 +60,16 @@ export function SongList({
   }, []);
 
   const handleRowsRendered = useCallback(
-    (_visibleRows, allRows) => {
+    (a, b) => {
       if (filtering) return;
-      loadRange(allRows.startIndex, allRows.stopIndex).then((loaded) => {
+      // Different releases of the underlying list library have shipped
+      // onRowsRendered with different call shapes (two range objects, one
+      // range object, or plain indices). Normalizing here means a library
+      // version bump can't silently stop rows from loading again — see
+      // useVirtualSongs.js for the matching eager-load fix for first paint.
+      const range = normalizeRange(a, b);
+      if (!range) return;
+      loadRange(range.startIndex, range.stopIndex).then((loaded) => {
         if (loaded) forceTick((t) => t + 1);
       });
     },

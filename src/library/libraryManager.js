@@ -75,13 +75,28 @@ export async function createMotifMusicFolder() {
   return record;
 }
 
-/** True if a previously-created Motif folder is still registered. Clears the stored reference if it's gone stale (e.g. the folder was disconnected). */
+/**
+ * True if a folder named "motif-music" is already connected — whether the
+ * app created it via createMotifMusicFolder(), or the user separately
+ * connected an existing folder that happens to have that name via "Use
+ * Existing Folder". Either way it's treated as the active Motif folder, so
+ * the UI never offers to create a second one on top of it.
+ */
 export async function hasMotifMusicFolder() {
-  const id = await getMotifFolderId();
-  if (!id) return false;
   const all = await getAllDirectoryHandles();
-  if (all.some((f) => f.id === id)) return true;
-  await setMotifFolderId(null);
+
+  const id = await getMotifFolderId();
+  if (id) {
+    if (all.some((f) => f.id === id)) return true;
+    await setMotifFolderId(null); // stale reference — the folder was disconnected
+  }
+
+  const byName = all.find((f) => f.name === MOTIF_FOLDER_NAME);
+  if (byName) {
+    await setMotifFolderId(byName.id);
+    return true;
+  }
+
   return false;
 }
 

@@ -16,6 +16,7 @@ import { useMountTransition } from "../../utils/useMountTransition.js";
 import { useSmoothProgress } from "../../utils/useSmoothProgress.js";
 import { Artwork } from "../common/Artwork.jsx";
 import { LyricsView } from "./LyricsView.jsx";
+import { SeekBar } from "./SeekBar.jsx";
 import { formatDuration } from "../../utils/formatTime.js";
 
 const isolateDrag = {
@@ -74,40 +75,21 @@ export function NowPlaying() {
   const displayedTime = dragValue ?? smoothTime;
   const lyricsUnavailable = current.lyrics === false;
 
-  // Pointer capture keeps every subsequent pointermove/pointerup routed to
-  // this exact element for the life of the gesture, even once the
-  // finger/cursor drifts outside the input's bounding box — without it,
-  // a drag that leaves the input area can silently stop being tracked.
-  const handleSeekPointerDown = (e) => {
-    draggingRef.current = true;
-    setDragValue(smoothTime);
-    beginScrub();
-    try {
-      e.target.setPointerCapture(e.pointerId);
-    } catch {
-      // Pointer capture unsupported — drag still works via native range behavior.
-    }
-  };
-
-  const handleSeekInput = (e) => {
-    setDragValue(Number(e.target.value));
-  };
-
-  const handleSeekRelease = (e) => {
-    if (!draggingRef.current) return;
-    draggingRef.current = false;
-    endScrub(Number(e.target.value));
-    try {
-      e.target.releasePointerCapture(e.pointerId);
-    } catch {
-      // Already released or unsupported — nothing to clean up.
-    }
-  };
-
-  const handleSeekChange = (e) => {
+  // The very first onChange tick of a drag marks the start of scrubbing
+  // (pauses playback so audio doesn't stutter while dragging); onCommit
+  // fires once, on release, and is the only point that actually seeks.
+  const handleSeekChange = (v) => {
     if (!draggingRef.current) {
-      seek(Number(e.target.value));
+      draggingRef.current = true;
+      beginScrub();
     }
+    setDragValue(v);
+  };
+
+  const handleSeekCommit = (v) => {
+    draggingRef.current = false;
+    setDragValue(v);
+    endScrub(v);
   };
 
   return (
@@ -148,20 +130,12 @@ export function NowPlaying() {
         <p className="now-playing__artist">{current.artist}</p>
       </div>
 
-      <div className="now-playing__seek">
-        <input
-          type="range"
-          min={0}
+      <div className="now-playing__seek" {...isolateDrag}>
+        <SeekBar
+          value={displayedTime}
           max={duration || 0}
-          step={0.1}
-          value={Math.min(displayedTime, duration || 0)}
-          onPointerDown={handleSeekPointerDown}
-          onInput={handleSeekInput}
-          onPointerUp={handleSeekRelease}
-          onPointerCancel={handleSeekRelease}
           onChange={handleSeekChange}
-          {...isolateDrag}
-          aria-label="Seek"
+          onCommit={handleSeekCommit}
         />
         <div className="now-playing__times mono">
           <span>{formatDuration(displayedTime)}</span>

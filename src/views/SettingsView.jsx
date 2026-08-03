@@ -2,8 +2,11 @@ import { useEffect, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { useMountTransition } from "../utils/useMountTransition.js";
 import { useLibrary } from "../state/LibraryContext.jsx";
+import { useUpdateManager } from "../state/UpdateContext.jsx";
 import { getSetting, setSetting } from "../db/settingsRepo.js";
 import { resetSetup } from "../setup/setupState.js";
+import { pushToast } from "../state/toastBus.js";
+import { Toggle } from "../components/common/Toggle.jsx";
 
 function useStorageEstimate() {
   const [estimate, setEstimate] = useState(null);
@@ -26,11 +29,35 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
   const estimate = useStorageEstimate();
   const { shouldRender, entered } = useMountTransition(isOpen, 280);
   const [discogsToken, setDiscogsToken] = useState("");
+  const [resettingSetup, setResettingSetup] = useState(false);
   const { supported, motifFolderExists, createMotifFolder } = useLibrary();
+  const {
+    needRefresh,
+    checking,
+    checkForUpdate,
+    applyUpdate,
+    autoCheckUpdates,
+    setAutoCheckUpdates,
+  } = useUpdateManager();
 
   useEffect(() => {
     getSetting("discogsToken", "").then((v) => setDiscogsToken(v || ""));
   }, []);
+
+  const handleResetSetup = async () => {
+    setResettingSetup(true);
+    try {
+      await resetSetup();
+      // resetSetup() reloads the page on success, so nothing after this
+      // line normally runs — the catch below only matters if it throws
+      // before getting there (e.g. IndexedDB write failure).
+    } catch (err) {
+      setResettingSetup(false);
+      pushToast(err.message || "Couldn't reset setup — try again.", {
+        type: "error",
+      });
+    }
+  };
 
   if (!shouldRender) return null;
 
@@ -88,6 +115,39 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
           />
         </section>
 
+        <section>
+          <h2 className="home-rail__title">Updates</h2>
+          <div className="settings-overlay__row">
+            <button
+              className="settings-overlay__sample-btn"
+              onClick={() => checkForUpdate()}
+              disabled={checking}
+            >
+              {checking ? "Checking…" : "Check for Updates"}
+            </button>
+            {needRefresh && (
+              <button
+                className="settings-overlay__sample-btn"
+                onClick={applyUpdate}
+              >
+                Refresh now
+              </button>
+            )}
+          </div>
+          <p className="settings-overlay__note" style={{ marginBottom: 8 }}>
+            {needRefresh
+              ? "An update has downloaded and is ready to apply."
+              : "Motif checks for a new version and installs it in the background."}
+          </p>
+          <Toggle
+            id="auto-check-updates"
+            checked={autoCheckUpdates}
+            onChange={setAutoCheckUpdates}
+            label="Automatically check for updates"
+            description="Checks hourly while Motif is open and applies updates with minimal disruption."
+          />
+        </section>
+
         {estimate && (
           <section>
             <h2 className="home-rail__title">Storage</h2>
@@ -104,8 +164,12 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
 
         <section>
           <h2 className="home-rail__title">Setup</h2>
-          <button className="settings-overlay__sample-btn" onClick={resetSetup}>
-            Reset setup
+          <button
+            className="settings-overlay__sample-btn"
+            onClick={handleResetSetup}
+            disabled={resettingSetup}
+          >
+            {resettingSetup ? "Resetting…" : "Reset setup"}
           </button>
           <p className="settings-overlay__note">
             Runs the first-run setup flow again. Your connected folders and

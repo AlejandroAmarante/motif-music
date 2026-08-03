@@ -1,13 +1,21 @@
 /* ============================================================
    Bottom Nav
+   Fixed to the viewport rather than laid out in #root's flex column —
+   on mobile, address-bar show/hide can otherwise cause it to visually
+   drift or be clipped mid-scroll. .app-main reserves matching space via
+   padding-bottom (below) so content is never hidden behind it.
    ============================================================ */
 .bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
   display: flex;
   height: var(--nav-height);
   padding-bottom: var(--safe-bottom);
   background: var(--bg-elevated);
   border-top: 1px solid var(--border);
-  flex-shrink: 0;
 }
 .bottom-nav__item {
   position: relative;
@@ -36,9 +44,14 @@
 
 /* ============================================================
    Mini Player
+   Also fixed, anchored directly above the bottom nav (same reasoning).
    ============================================================ */
 .mini-player {
-  position: relative;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--nav-height) + var(--safe-bottom));
+  z-index: 39;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -46,7 +59,6 @@
   padding: 0 10px;
   background: var(--bg-elevated);
   border-top: 1px solid var(--border);
-  flex-shrink: 0;
   overflow: hidden;
 }
 .mini-player__progress {
@@ -166,7 +178,7 @@
   flex-shrink: 0;
 }
 .now-playing__eyebrow {
-  font-size: 11px;
+  font-size: 12.5px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-faint);
@@ -202,16 +214,12 @@
   font-size: 15px;
   color: var(--text-muted);
 }
-.now-playing__seek input[type='range'] {
-  width: 100%;
-  accent-color: var(--accent);
-}
 .now-playing__times {
   display: flex;
   justify-content: space-between;
   font-size: 11.5px;
   color: var(--text-faint);
-  margin-top: 2px;
+  margin-top: 6px;
 }
 .now-playing__transport {
   display: flex;
@@ -262,6 +270,52 @@
 .now-playing__volume {
   flex: 1;
   accent-color: var(--accent);
+}
+
+/* ============================================================
+   Seek bar — built on @radix-ui/react-slider (see SeekBar.jsx). Radix
+   owns pointer capture and touch handling, so this replaced a bare
+   <input type="range"> whose drag tracking broke once the pointer left
+   the control, particularly on mobile/PWA.
+   ============================================================ */
+.seekbar-root {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 28px;
+  touch-action: none;
+  user-select: none;
+  cursor: pointer;
+}
+.seekbar-track {
+  position: relative;
+  flex-grow: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-strong);
+}
+.seekbar-range {
+  position: absolute;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.seekbar-thumb {
+  display: block;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+.seekbar-thumb:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.seekbar-root[data-disabled] {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* ============================================================
@@ -385,7 +439,7 @@
   flex-shrink: 0;
 }
 .view__header h1 {
-  font-size: 26px;
+  font-size: 28px;
   /* Forces an identical header row height in every view, whether or not a
      header-action button (50px) sits next to the title — without this,
      a bare <h1> and an <h1>+button row end up different heights, so the
@@ -415,6 +469,9 @@
   padding: 0 0 var(--space-2);
 }
 .home-rail__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 19px;
   color: var(--text);
   padding: 12px 20px;
@@ -422,25 +479,43 @@
   font-weight: 500;
   letter-spacing: -0.01em;
 }
+.home-rail__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+/* Settings / Connected Folders overlays already carry their own
+   horizontal page padding (see .settings-overlay below) — without this
+   override, .home-rail__title's own left/right padding stacked on top
+   of it, doubling the indent on section headers specifically (visible
+   as an odd gap versus the buttons/rows beneath them). Home/Search/Queue
+   usages are unaffected since those pages have no outer horizontal
+   padding of their own. */
+.settings-overlay__body .home-rail__title {
+  padding-left: 0;
+  padding-right: 0;
+}
 .home-rail__scroll {
   display: flex;
-  gap: 14px;
+  gap: 16px;
   overflow-x: auto;
   padding: 0 20px 4px;
 }
 .home-card {
   flex-shrink: 0;
-  width: 128px;
+  width: 144px;
   text-align: left;
 }
 .home-card__art {
-  width: 128px;
-  height: 128px;
-  margin-bottom: 8px;
+  width: 144px;
+  height: 144px;
+  margin-bottom: 10px;
 }
 .home-card__art .motif-mark { height: 30%; }
 .home-card__title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--text);
   white-space: nowrap;
@@ -448,7 +523,7 @@
   text-overflow: ellipsis;
 }
 .home-card__artist {
-  font-size: 11.5px;
+  font-size: 12.5px;
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -713,7 +788,7 @@
   display: flex;
   flex-direction: column;
   background: var(--bg);
-  padding: calc(var(--safe-top) + 8px) 20px calc(var(--safe-bottom) + 24px);
+  padding: calc(var(--safe-top) + 8px) 28px calc(var(--safe-bottom) + 24px);
   transform: translateY(100%);
   transition: transform var(--duration-slow) var(--ease-standard);
 }
@@ -743,6 +818,15 @@
   color: var(--text);
   font-size: 14px;
   font-weight: 500;
+}
+.settings-overlay__sample-btn:disabled {
+  opacity: 0.5;
+}
+.settings-overlay__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 .settings-overlay__input {
   width: 100%;
@@ -780,6 +864,11 @@
 
 /* ============================================================
    App shell root
+   `.app-main` reserves space at the bottom equal to the fixed bottom
+   nav (and, when a track is loaded, the fixed mini-player above it) so
+   scrollable view content is never hidden behind either — see
+   App.jsx, which toggles the modifier class based on whether a track
+   is currently loaded.
    ============================================================ */
 .app-main {
   flex: 1;
@@ -787,6 +876,10 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  padding-bottom: calc(var(--nav-height) + var(--safe-bottom));
+}
+.app-main--with-miniplayer {
+  padding-bottom: calc(var(--nav-height) + var(--safe-bottom) + var(--miniplayer-height));
 }
 
 /* ============================================================

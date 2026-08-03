@@ -1,8 +1,9 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   isFileSystemAccessSupported,
   addLibraryFolder,
   createMotifMusicFolder,
+  hasMotifMusicFolder,
   scanAllFolders,
   scanFoundNoMusic,
   DuplicateFolderError,
@@ -33,8 +34,24 @@ export function SetupFlow({ onComplete }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [folderRecord, setFolderRecord] = useState(null);
+  const [motifFolderTaken, setMotifFolderTaken] = useState(false);
 
   const supported = isFileSystemAccessSupported();
+
+  useEffect(() => {
+    hasMotifMusicFolder().then(setMotifFolderTaken);
+  }, []);
+
+  // Lets someone get into the app immediately without connecting a
+  // folder. Every view already has an empty-library fallback (Home,
+  // Library, Search, Queue all render a "connect a folder" prompt when
+  // songCount is 0), so there's no extra state to seed here — skipping
+  // just means folders is an empty array, which those views already
+  // handle gracefully.
+  const handleSkip = useCallback(async () => {
+    await markSetupComplete();
+    onComplete();
+  }, [onComplete]);
 
   const goToFolderResult = useCallback(async (record) => {
     setFolderRecord(record);
@@ -118,6 +135,9 @@ export function SetupFlow({ onComplete }) {
         <button className="setup-flow__cta" onClick={() => setStep("compat")}>
           Get Started
         </button>
+        <button className="setup-flow__secondary" onClick={handleSkip}>
+          Skip Setup
+        </button>
       </StepShell>
     );
   }
@@ -152,6 +172,9 @@ export function SetupFlow({ onComplete }) {
             </p>
           </>
         )}
+        <button className="setup-flow__secondary" onClick={handleSkip}>
+          Skip Setup
+        </button>
       </StepShell>
     );
   }
@@ -177,24 +200,29 @@ export function SetupFlow({ onComplete }) {
               Point Motif at a folder of music you already have.
             </span>
           </button>
-          <button
-            className="setup-flow__option"
-            onClick={handleCreateMotifFolder}
-            disabled={busy}
-          >
-            <span className="setup-flow__option-title">
-              Create Motif Music Folder
-            </span>
-            <span className="setup-flow__option-desc">
-              Motif creates a fresh "motif-music" folder for you to fill.
-            </span>
-          </button>
+          {!motifFolderTaken && (
+            <button
+              className="setup-flow__option"
+              onClick={handleCreateMotifFolder}
+              disabled={busy}
+            >
+              <span className="setup-flow__option-title">
+                Create Motif Music Folder
+              </span>
+              <span className="setup-flow__option-desc">
+                Motif creates a fresh "motif-music" folder for you to fill.
+              </span>
+            </button>
+          )}
         </div>
         {busy && (
           <p className="setup-flow__status">
             <Mark /> Setting things up…
           </p>
         )}
+        <button className="setup-flow__secondary" onClick={handleSkip}>
+          Skip Setup
+        </button>
       </StepShell>
     );
   }

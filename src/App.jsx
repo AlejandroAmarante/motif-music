@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { LibraryProvider } from "./state/LibraryContext.jsx";
 import { PlayerProvider, usePlayer } from "./state/PlayerContext.jsx";
+import { UpdateProvider } from "./state/UpdateContext.jsx";
 import { BottomNav } from "./components/layout/BottomNav.jsx";
 import { MiniPlayer } from "./components/player/MiniPlayer.jsx";
 import { NowPlaying } from "./components/player/NowPlaying.jsx";
@@ -33,7 +34,9 @@ function AppShell() {
 
   return (
     <>
-      <main className="app-main">
+      <main
+        className={`app-main${current ? " app-main--with-miniplayer" : ""}`}
+      >
         <ActiveView
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenFolders={openFolders}
@@ -88,7 +91,9 @@ export default function App() {
   return (
     <LibraryProvider>
       <PlayerProvider>
-        <AppShell />
+        <UpdateProvider>
+          <AppShell />
+        </UpdateProvider>
       </PlayerProvider>
     </LibraryProvider>
   );
