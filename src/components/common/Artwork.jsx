@@ -43,7 +43,12 @@ export function Artwork({ artworkId, song, alt, className = '', playing = false 
           <span /><span /><span /><span />
         </span>
       </div>
-      <img src={url || ''} alt={alt} className={`artwork artwork--loaded${url ? ' is-visible' : ''}`} />
+      {/* `undefined`, not `''` — an empty string src still counts as a URL
+          to the browser and triggers a request for the current document,
+          which is the exact warning this avoids. Omitting the attribute
+          entirely (via undefined) keeps the element mounted for the
+          crossfade without ever pointing it at a real-but-wrong URL. */}
+      <img src={url || undefined} alt={alt} className={`artwork artwork--loaded${url ? ' is-visible' : ''}`} />
     </div>
   );
 }

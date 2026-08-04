@@ -17,6 +17,7 @@ function activeLineIndex(synced, currentTime) {
 export function LyricsView({ isOpen, onClose, song, currentTime, onSeekTo }) {
   const { shouldRender, entered } = useMountTransition(isOpen, 260);
   const lineRefs = useRef([]);
+  const wasOpenRef = useRef(false);
   const [fetchState, setFetchState] = useState("idle");
 
   useEffect(() => {
@@ -50,13 +51,30 @@ export function LyricsView({ isOpen, onClose, song, currentTime, onSeekTo }) {
     [synced, currentTime],
   );
 
+  // Keeps the current line centered as playback advances, but also — the
+  // actual fix here — re-centers it every time the sheet is (re)opened,
+  // not just when the active line itself changes. Without `shouldRender`
+  // and `isOpen` in the deps, opening the sheet while the active line
+  // *hadn't* changed since the last time it was open (the common case: the
+  // line refs get wiped on close, but activeIdx keeps quietly tracking in
+  // the background since this component never unmounts) meant this effect
+  // simply had nothing new to react to, so the sheet opened wherever it
+  // last happened to be scrolled instead of centered on the lyric. Because
+  // `shouldRender` flips true one render *after* `isOpen` does (see
+  // useMountTransition), depending on it here is what makes this re-fire
+  // once the line elements actually exist to scroll to.
   useEffect(() => {
-    if (activeIdx < 0) return;
+    const justOpened = isOpen && !wasOpenRef.current;
+    wasOpenRef.current = isOpen;
+    if (!isOpen || !shouldRender || activeIdx < 0) return;
     lineRefs.current[activeIdx]?.scrollIntoView({
       block: "center",
-      behavior: "smooth",
+      // Instant on open — a visible smooth-scroll right as the sheet is
+      // also sliding up would read as a glitch rather than "already
+      // centered." Playback-driven advances stay smooth.
+      behavior: justOpened ? "auto" : "smooth",
     });
-  }, [activeIdx]);
+  }, [activeIdx, isOpen, shouldRender]);
 
   if (!shouldRender || !song) return null;
 

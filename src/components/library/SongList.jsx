@@ -36,12 +36,16 @@ export function SongList({
   emptyState,
   overrideSongs = null,
 }) {
+  // getRow's own identity changes whenever useVirtualSongs' cache is
+  // actually mutated (see useVirtualSongs.js) — that's what lets
+  // react-window's <List> know a given row needs to re-render, since it
+  // shallow-compares `rowProps` rather than watching our cache ref. No
+  // extra "did something load" bookkeeping is needed here anymore.
   const { ids, count, loading, loadRange, getRow } = useVirtualSongs({
     indexName: sortIndex,
     version,
   });
   const { playSongs, current, isPlaying } = usePlayer();
-  const [, forceTick] = useState(0);
   const containerRef = useRef(null);
   const [height, setHeight] = useState(400);
 
@@ -69,9 +73,7 @@ export function SongList({
       // useVirtualSongs.js for the matching eager-load fix for first paint.
       const range = normalizeRange(a, b);
       if (!range) return;
-      loadRange(range.startIndex, range.stopIndex).then((loaded) => {
-        if (loaded) forceTick((t) => t + 1);
-      });
+      loadRange(range.startIndex, range.stopIndex);
     },
     [loadRange, filtering],
   );

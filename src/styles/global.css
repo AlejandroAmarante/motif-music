@@ -64,6 +64,25 @@
   box-sizing: border-box;
 }
 
+/* Scrollbars are hidden everywhere, including inside elements we don't
+   directly control the markup of (react-window's internally-rendered
+   scroll container, a <select>'s native popup, etc.) — a universal
+   selector reaches those where a class we'd have to remember to add
+   wouldn't. Scrolling itself still works via touch/wheel/keyboard; only
+   the track/thumb and the space reserved for them are gone. `.scroll-
+   region` used to additionally set a thin/colored scrollbar, but that
+   would now just fight this rule (class selectors beat the universal
+   one), so it's been removed there instead of layered on top. */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 html,
 body {
   height: 100%;
@@ -135,8 +154,6 @@ img {
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
 }
 
 .visually-hidden {
