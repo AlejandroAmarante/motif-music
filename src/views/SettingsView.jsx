@@ -1,5 +1,13 @@
 import { useEffect, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import {
+  ChevronDown,
+  Library,
+  Image,
+  RefreshCw,
+  HardDrive,
+  RotateCcw,
+  Info,
+} from "lucide-react";
 import { useMountTransition } from "../utils/useMountTransition.js";
 import { useLibrary } from "../state/LibraryContext.jsx";
 import { useUpdateManager } from "../state/UpdateContext.jsx";
@@ -7,6 +15,17 @@ import { getSetting, setSetting } from "../db/settingsRepo.js";
 import { resetSetup } from "../setup/setupState.js";
 import { pushToast } from "../state/toastBus.js";
 import { Toggle } from "../components/common/Toggle.jsx";
+
+function SectionTitle({ icon: Icon, children }) {
+  return (
+    <h2 className="home-rail__title">
+      <span className="home-rail__icon" aria-hidden="true">
+        <Icon size={17} strokeWidth={1.8} />
+      </span>
+      {children}
+    </h2>
+  );
+}
 
 function useStorageEstimate() {
   const [estimate, setEstimate] = useState(null);
@@ -77,7 +96,7 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
 
       <div className="view__scroll scroll-region settings-overlay__body">
         <section>
-          <h2 className="home-rail__title">Library</h2>
+          <SectionTitle icon={Library}>Library</SectionTitle>
           <button
             className="settings-overlay__sample-btn"
             onClick={onOpenFolders}
@@ -96,7 +115,7 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
         </section>
 
         <section>
-          <h2 className="home-rail__title">Artwork</h2>
+          <SectionTitle icon={Image}>Artwork</SectionTitle>
           <p className="settings-overlay__note" style={{ marginBottom: 8 }}>
             Missing album art is looked up automatically via MusicBrainz and
             Deezer, once per album, and cached — no setup needed. Discogs is
@@ -116,7 +135,7 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
         </section>
 
         <section>
-          <h2 className="home-rail__title">Updates</h2>
+          <SectionTitle icon={RefreshCw}>Updates</SectionTitle>
           <div className="settings-overlay__row">
             <button
               className="settings-overlay__sample-btn"
@@ -150,7 +169,7 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
 
         {estimate && (
           <section>
-            <h2 className="home-rail__title">Storage</h2>
+            <SectionTitle icon={HardDrive}>Storage</SectionTitle>
             <p className="settings-overlay__storage mono">
               {formatBytes(estimate.usage)} used of{" "}
               {formatBytes(estimate.quota)} available
@@ -163,7 +182,7 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
         )}
 
         <section>
-          <h2 className="home-rail__title">Setup</h2>
+          <SectionTitle icon={RotateCcw}>Setup</SectionTitle>
           <button
             className="settings-overlay__sample-btn"
             onClick={handleResetSetup}
@@ -178,7 +197,7 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
         </section>
 
         <section>
-          <h2 className="home-rail__title">About</h2>
+          <SectionTitle icon={Info}>About</SectionTitle>
           <p className="settings-overlay__note">
             Local-first music. Your library, not a subscription.
           </p>

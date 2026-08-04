@@ -1,4 +1,4 @@
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, FolderCog, Clock, AlertTriangle } from "lucide-react";
 import { FolderPicker } from "../components/library/FolderPicker.jsx";
 import { Toggle } from "../components/common/Toggle.jsx";
 import { useMountTransition } from "../utils/useMountTransition.js";
@@ -11,6 +11,17 @@ const SCAN_OPTIONS = [
   { value: "interval-60", label: "Every hour" },
   { value: "watch", label: "Watch for changes (experimental)" },
 ];
+
+function SectionTitle({ icon: Icon, children }) {
+  return (
+    <h2 className="home-rail__title">
+      <span className="home-rail__icon" aria-hidden="true">
+        <Icon size={17} strokeWidth={1.8} />
+      </span>
+      {children}
+    </h2>
+  );
+}
 
 export function ConnectedFoldersView({ isOpen, onClose }) {
   const {
@@ -40,12 +51,12 @@ export function ConnectedFoldersView({ isOpen, onClose }) {
 
       <div className="view__scroll scroll-region settings-overlay__body">
         <section>
-          <h2 className="home-rail__title">Folders</h2>
+          <SectionTitle icon={FolderCog}>Folders</SectionTitle>
           <FolderPicker />
         </section>
 
         <section>
-          <h2 className="home-rail__title">Rescan frequency</h2>
+          <SectionTitle icon={Clock}>Rescan frequency</SectionTitle>
           <select
             className="connected-folders__select"
             value={scanMode}
@@ -72,7 +83,7 @@ export function ConnectedFoldersView({ isOpen, onClose }) {
         </section>
 
         <section>
-          <h2 className="home-rail__title">Missing files</h2>
+          <SectionTitle icon={AlertTriangle}>Missing files</SectionTitle>
           <Toggle
             id="auto-remove-missing"
             checked={autoRemoveMissing}

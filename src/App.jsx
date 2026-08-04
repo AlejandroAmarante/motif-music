@@ -60,23 +60,25 @@ function AppShell() {
 }
 
 export default function App() {
-  // null = still checking. If setup was never marked complete but the DB
-  // already has folders (an existing install from before this feature
-  // shipped), treat it as complete instead of forcing onboarding on
-  // someone who's already set up.
+  // null (still checking) is distinct from setupComplete === false below —
+  // isSetupComplete() itself can also resolve to null, meaning the setting
+  // was never written at all (a pre-onboarding install being upgraded).
+  // Only THAT case gets auto-completed when folders already exist; an
+  // explicit Reset Setup writes a real `false`, which must be left alone
+  // or the app would immediately re-complete itself since the user's
+  // folders are deliberately left connected.
   const [setupComplete, setSetupComplete] = useState(null);
 
   useEffect(() => {
     (async () => {
-      let complete = await isSetupComplete();
-      if (!complete) {
+      const stored = await isSetupComplete(); // true | false | null
+      let complete = stored;
+      if (stored === null) {
         const folders = await listLibraryFolders();
-        if (folders.length > 0) {
-          await markSetupComplete();
-          complete = true;
-        }
+        complete = folders.length > 0;
+        if (complete) await markSetupComplete();
       }
-      setSetupComplete(complete);
+      setSetupComplete(Boolean(complete));
     })();
   }, []);
 

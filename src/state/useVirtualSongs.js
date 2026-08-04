@@ -13,12 +13,25 @@ export function useVirtualSongs({
   const [ids, setIds] = useState([]);
   const [loading, setLoading] = useState(true);
   const cache = useRef(new Map());
-  const [, forceRerender] = useState(0);
+  // Bumped every time loadRange actually adds something to the cache.
+  // This is the real fix for songs getting stuck on skeleton rows: react-
+  // window's <List> only re-renders a given row when something inside its
+  // `rowProps` object actually changes (it shallow-compares them) — it has
+  // no way to know that `cache` (a plain ref) was mutated behind the
+  // scenes. `getRow` below depends on this counter specifically so its
+  // *function identity* changes whenever new data lands, which is what
+  // actually tells List "these rows need to re-render." Depending on
+  // `ids` alone (the previous approach) meant getRow's identity was stable
+  // across a cache-only update, so already-mounted rows silently kept
+  // showing their initial (skeleton) render forever, even though the data
+  // they needed was sitting in the cache the whole time.
+  const [cacheTick, setCacheTick] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     cache.current = new Map();
+    setCacheTick(0);
     getSortedIds(indexName).then((sortedIds) => {
       if (!cancelled) {
         setIds(sortedIds);
@@ -35,7 +48,7 @@ export function useVirtualSongs({
     [ids],
   );
 
-  /** Returns true only if it actually fetched something new — lets the caller skip a forced re-render when there's nothing to show that isn't already showing. */
+  /** Returns true only if it actually fetched something new. */
   const loadRange = useCallback(
     async (startIndex, stopIndex) => {
       if (!Number.isFinite(startIndex) || !Number.isFinite(stopIndex)) return false;
@@ -47,6 +60,7 @@ export function useVirtualSongs({
       if (!windowIds.length) return false;
       const songs = await getByIds(windowIds);
       songs.forEach((song) => cache.current.set(song.id, song));
+      setCacheTick((t) => t + 1);
       return true;
     },
     [ids],
@@ -54,7 +68,7 @@ export function useVirtualSongs({
 
   const getRow = useCallback(
     (index) => cache.current.get(ids[index]) ?? null,
-    [ids],
+    [ids, cacheTick],
   );
 
   // Root-cause fix for songs never appearing until a filter is applied:
@@ -63,20 +77,14 @@ export function useVirtualSongs({
   // already-hydrated search results directly, which is why filtering
   // "worked"). Loading the first window as soon as ids are known removes
   // that dependency — rows show up immediately, and onRowsRendered still
-  // takes over for everything scrolled into view afterward.
+  // takes over for everything scrolled into view afterward. No separate
+  // "did I just load something" bookkeeping is needed here anymore —
+  // loadRange itself bumps cacheTick (and therefore triggers a re-render)
+  // whenever it actually loads something.
   useEffect(() => {
-    if (!ids.length) return undefined;
-    let cancelled = false;
-    loadRange(0, Math.min(ids.length - 1, INITIAL_LOAD_COUNT - 1)).then(
-      (loaded) => {
-        if (loaded && !cancelled) forceRerender((t) => t + 1);
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ids]);
+    if (!ids.length) return;
+    loadRange(0, Math.min(ids.length - 1, INITIAL_LOAD_COUNT - 1));
+  }, [ids, loadRange]);
 
   return { ids, count: ids.length, loading, isRowLoaded, loadRange, getRow };
 }

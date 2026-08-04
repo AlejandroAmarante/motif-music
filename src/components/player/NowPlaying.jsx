@@ -51,6 +51,16 @@ export function NowPlaying() {
   const [dragValue, setDragValue] = useState(null);
   const [lyricsOpen, setLyricsOpen] = useState(false);
   const draggingRef = useRef(false);
+  // While seeking, a fast horizontal drag — or the release motion itself —
+  // can otherwise be misread by the swipe library as a left/right/down
+  // gesture, firing next()/previous()/close() mid-scrub. That's also what
+  // was racing endScrub's play() call against a fresh track load, which
+  // surfaced as "play() request was interrupted" console noise. This flag
+  // stays true from the first drag tick through release, and is only
+  // cleared once a genuinely new touch/pointer sequence starts (see
+  // onTouchStartCapture/onPointerDownCapture below) — not by the release
+  // that ends the seek itself.
+  const seekingRef = useRef(false);
   const { shouldRender, entered } = useMountTransition(nowPlayingOpen, 320);
   const smoothTime = useSmoothProgress(currentTime, isPlaying, playbackRate);
 
@@ -62,13 +72,23 @@ export function NowPlaying() {
   }, [currentTime]);
 
   const swipeHandlers = useSwipeable({
-    onSwipedDown: closeNowPlaying,
-    onSwipedLeft: next,
-    onSwipedRight: previous,
+    onSwipedDown: () => {
+      if (!seekingRef.current) closeNowPlaying();
+    },
+    onSwipedLeft: () => {
+      if (!seekingRef.current) next();
+    },
+    onSwipedRight: () => {
+      if (!seekingRef.current) previous();
+    },
     trackMouse: true,
     preventScrollOnSwipe: true,
     delta: 50,
   });
+
+  const resetSeekGuard = () => {
+    seekingRef.current = false;
+  };
 
   if (!shouldRender || !current) return null;
 
@@ -81,6 +101,7 @@ export function NowPlaying() {
   const handleSeekChange = (v) => {
     if (!draggingRef.current) {
       draggingRef.current = true;
+      seekingRef.current = true;
       beginScrub();
     }
     setDragValue(v);
@@ -90,12 +111,16 @@ export function NowPlaying() {
     draggingRef.current = false;
     setDragValue(v);
     endScrub(v);
+    // seekingRef deliberately stays true here — see the comment on its
+    // declaration above.
   };
 
   return (
     <div
       className={`now-playing${entered ? " is-open" : ""}`}
       {...swipeHandlers}
+      onTouchStartCapture={resetSeekGuard}
+      onPointerDownCapture={resetSeekGuard}
     >
       <div className="now-playing__handle-zone">
         <button
