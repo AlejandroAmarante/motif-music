@@ -14,6 +14,13 @@ const CLIENT_HEADERS = {
   "Lrclib-Client": `${CLIENT_NAME} v${CLIENT_VERSION} (${CLIENT_HOMEPAGE})`,
 };
 
+// A confirmed "no lyrics for this track" result is cached with a
+// timestamp (see songsRepo.setLyrics), and AudioEngine won't hit LRCLIB
+// again for that track until this much time has passed — otherwise a song
+// with no lyrics would fire a fresh request to a free, community-run API
+// every single time it's played.
+export const LYRICS_RECHECK_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
+
 function toLyricsShape(record) {
   if (!record || record.instrumental) return null;
   if (record.syncedLyrics) {
@@ -53,7 +60,8 @@ async function searchFallback({ title, artist }) {
  * Returns one of three things, which matters for what the caller persists:
  *  - a lyrics object `{ synced, text }` — found, safe to cache
  *  - `false` — LRCLIB was reached and confirmed it has nothing for this
- *    track; safe to cache so we don't ask again
+ *    track; safe to cache so we don't ask again (subject to the cooldown
+ *    above, enforced by the caller)
  *  - `null` — the lookup couldn't be completed (network/CORS/etc.); do NOT
  *    cache this as "unavailable", the caller should be able to retry later
  */

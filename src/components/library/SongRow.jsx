@@ -65,7 +65,7 @@ function SongRowInner({
           }}
           aria-label={`Remove ${song.title} — file unavailable`}
         >
-          <Trash2 size={18} strokeWidth={1.8} />
+          <Trash2 size={21} strokeWidth={1.8} />
         </button>
       ) : (
         <button
@@ -79,7 +79,7 @@ function SongRowInner({
           aria-pressed={favorite}
         >
           <Heart
-            size={20}
+            size={23}
             strokeWidth={1.8}
             fill={favorite ? "currentColor" : "none"}
           />

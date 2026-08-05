@@ -16,7 +16,7 @@ function SectionTitle({ icon: Icon, children }) {
   return (
     <h2 className="home-rail__title">
       <span className="home-rail__icon" aria-hidden="true">
-        <Icon size={17} strokeWidth={1.8} />
+        <Icon size={20} strokeWidth={1.8} />
       </span>
       {children}
     </h2>
@@ -43,7 +43,7 @@ export function ConnectedFoldersView({ isOpen, onClose }) {
           onClick={onClose}
           aria-label="Close connected folders"
         >
-          <ChevronDown size={22} strokeWidth={2} />
+          <ChevronDown size={25} strokeWidth={2} />
         </button>
         <span className="now-playing__eyebrow">Connected Folders</span>
         <div className="now-playing__spacer" />

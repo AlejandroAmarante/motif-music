@@ -93,7 +93,7 @@ export function QueueView() {
               <p className="song-row__artist">{current.artist}</p>
             </div>
             <span className="queue-view__repeat-badge">
-              <Repeat size={14} strokeWidth={2} />
+              <Repeat size={16} strokeWidth={2} />
               Repeats
             </span>
           </div>
@@ -127,7 +127,7 @@ export function QueueView() {
                 }}
                 aria-label={`Remove ${song.title} from queue`}
               >
-                <X size={16} strokeWidth={2} />
+                <X size={18} strokeWidth={2} />
               </button>
             </div>
           );

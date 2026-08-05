@@ -89,7 +89,7 @@ export function LyricsView({ isOpen, onClose, song, currentTime, onSeekTo }) {
           onClick={onClose}
           aria-label="Close lyrics"
         >
-          <ChevronDown size={22} strokeWidth={2} />
+          <ChevronDown size={25} strokeWidth={2} />
         </button>
         <span className="now-playing__eyebrow">Lyrics</span>
         <div className="now-playing__spacer" />

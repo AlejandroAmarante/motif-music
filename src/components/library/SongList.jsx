@@ -5,7 +5,7 @@ import { getByIds } from "../../db/songsRepo.js";
 import { usePlayer } from "../../state/PlayerContext.jsx";
 import { SongRow } from "./SongRow.jsx";
 
-const ROW_HEIGHT = 68;
+const ROW_HEIGHT = 78;
 const PLAY_WINDOW = 300;
 
 function Row({ index, style, getRowAt, current, isPlaying, onPlay }) {

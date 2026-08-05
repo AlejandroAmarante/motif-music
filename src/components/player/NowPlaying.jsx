@@ -128,7 +128,7 @@ export function NowPlaying() {
           onClick={closeNowPlaying}
           aria-label="Collapse Now Playing"
         >
-          <ChevronDown size={22} strokeWidth={2} />
+          <ChevronDown size={25} strokeWidth={2} />
         </button>
         <span className="now-playing__eyebrow">Playing from Library</span>
         <button
@@ -137,7 +137,7 @@ export function NowPlaying() {
           aria-label={lyricsUnavailable ? "Lyrics unavailable" : "Show lyrics"}
           disabled={lyricsUnavailable}
         >
-          <MicVocal size={20} strokeWidth={1.8} />
+          <MicVocal size={23} strokeWidth={1.8} />
         </button>
       </div>
 
@@ -175,7 +175,7 @@ export function NowPlaying() {
           aria-pressed={shuffle}
           aria-label="Shuffle"
         >
-          <Shuffle size={20} strokeWidth={1.8} />
+          <Shuffle size={23} strokeWidth={1.8} />
         </button>
 
         <button
@@ -212,9 +212,9 @@ export function NowPlaying() {
           aria-label={`Repeat: ${repeatMode}`}
         >
           {repeatMode === "one" ? (
-            <Repeat1 size={20} strokeWidth={1.8} />
+            <Repeat1 size={23} strokeWidth={1.8} />
           ) : (
-            <Repeat size={20} strokeWidth={1.8} />
+            <Repeat size={23} strokeWidth={1.8} />
           )}
         </button>
       </div>

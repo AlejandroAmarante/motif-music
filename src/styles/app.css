@@ -162,8 +162,8 @@
   touch-action: none;
 }
 .now-playing__collapse {
-  width: var(--thumb);
-  height: var(--thumb);
+  width: var(--thumb-lg);
+  height: var(--thumb-lg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -174,7 +174,7 @@
   cursor: default;
 }
 .now-playing__spacer {
-  width: var(--thumb);
+  width: var(--thumb-lg);
   flex-shrink: 0;
 }
 .now-playing__eyebrow {
@@ -199,7 +199,16 @@
 }
 .now-playing__art .motif-mark { height: 22%; }
 .now-playing__meta {
-  padding-bottom: 22px;
+  /* Pulls meta (and everything stacked after it — seek, transport) up
+     toward the artwork, without touching .now-playing__art-wrap at all.
+     That's deliberate: art-wrap is flex:1 and centers the artwork within
+     whatever leftover space it's given, so changing ITS sizing to "make
+     room" would also shift the artwork's own position — the one thing
+     that was asked not to move. A negative margin here instead pulls this
+     block up into art-wrap's already-empty bottom padding, which is
+     unoccupied space below the artwork, not the artwork itself. */
+  margin-top: -16px;
+  padding-bottom: 18px;
 }
 .now-playing__title {
   font-size: 26px;
@@ -247,8 +256,8 @@
 }
 .now-playing__ghost-btn {
   position: relative;
-  width: var(--thumb);
-  height: var(--thumb);
+  width: 56px;
+  height: 56px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -333,7 +342,7 @@
 .song-row {
   display: flex;
   align-items: center;
-  gap: 13px;
+  gap: 15px;
   padding: 0 20px;
   border-bottom: 1px solid var(--border);
   transition: background-color var(--duration-fast) var(--ease-sharp);
@@ -345,8 +354,8 @@
   color: var(--accent);
 }
 .song-row__art {
-  width: 44px;
-  height: 44px;
+  width: 50px;
+  height: 50px;
   flex-shrink: 0;
 }
 .song-row__art .motif-mark { height: 40%; }
@@ -355,7 +364,7 @@
   min-width: 0;
 }
 .song-row__title {
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 500;
   color: var(--text);
   white-space: nowrap;
@@ -363,20 +372,20 @@
   text-overflow: ellipsis;
 }
 .song-row__artist {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .song-row__duration {
-  font-size: 11.5px;
+  font-size: 13px;
   color: var(--text-faint);
   flex-shrink: 0;
 }
 .song-row__fav {
-  width: 42px;
-  height: 42px;
+  width: 48px;
+  height: 48px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -396,8 +405,8 @@
   color: var(--danger);
 }
 .song-row__remove {
-  width: 42px;
-  height: 42px;
+  width: 48px;
+  height: 48px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -410,7 +419,7 @@
   padding: 0 16px;
 }
 .song-row__skeleton {
-  height: 40px;
+  height: 46px;
   width: 100%;
   border-radius: var(--radius-sm);
   background: linear-gradient(90deg, var(--surface) 0%, var(--surface-hover) 50%, var(--surface) 100%);
@@ -439,16 +448,16 @@
   flex-shrink: 0;
 }
 .view__header h1 {
-  font-size: 28px;
+  font-size: 32px;
   /* Forces an identical header row height in every view, whether or not a
      header-action button (50px) sits next to the title — without this,
      a bare <h1> and an <h1>+button row end up different heights, so the
      title sits at a different vertical position depending on the view. */
-  line-height: var(--thumb);
+  line-height: var(--thumb-lg);
 }
 .view__header-action {
-  width: var(--thumb);
-  height: var(--thumb);
+  width: var(--thumb-lg);
+  height: var(--thumb-lg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -471,8 +480,8 @@
 .home-rail__title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 19px;
+  gap: 9px;
+  font-size: 22px;
   color: var(--text);
   padding: 12px 20px;
   font-family: var(--font-display);
@@ -499,23 +508,23 @@
 }
 .home-rail__scroll {
   display: flex;
-  gap: 16px;
+  gap: 18px;
   overflow-x: auto;
   padding: 0 20px 4px;
 }
 .home-card {
   flex-shrink: 0;
-  width: 144px;
+  width: 166px;
   text-align: left;
 }
 .home-card__art {
-  width: 144px;
-  height: 144px;
+  width: 166px;
+  height: 166px;
   margin-bottom: 10px;
 }
 .home-card__art .motif-mark { height: 30%; }
 .home-card__title {
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 500;
   color: var(--text);
   white-space: nowrap;
@@ -523,7 +532,7 @@
   text-overflow: ellipsis;
 }
 .home-card__artist {
-  font-size: 12.5px;
+  font-size: 14.5px;
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -531,7 +540,7 @@
 }
 .home-view__note {
   padding: 18px 20px 8px;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--text-faint);
   line-height: 1.5;
 }
@@ -545,12 +554,12 @@
   color: var(--text-muted);
 }
 .home-empty h2 {
-  font-size: 18px;
+  font-size: 21px;
   color: var(--text);
   margin-top: 6px;
 }
 .home-empty p {
-  font-size: 13.5px;
+  font-size: 15.5px;
   line-height: 1.5;
 }
 .home-empty__cta {
@@ -558,15 +567,15 @@
   background: var(--text);
   color: var(--bg);
   font-weight: 600;
-  font-size: 15px;
-  min-height: var(--thumb);
-  padding: 0 26px;
-  border-radius: 26px;
+  font-size: 17px;
+  min-height: var(--thumb-lg);
+  padding: 0 30px;
+  border-radius: 30px;
 }
 .home-empty__secondary {
   margin-top: 10px;
   color: var(--text-muted);
-  font-size: 13.5px;
+  font-size: 15.5px;
   min-height: 40px;
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -593,9 +602,9 @@
   gap: 6px;
   flex-shrink: 0;
   border: 1px solid var(--border-strong);
-  border-radius: 20px;
-  padding: 9px 14px;
-  font-size: 13px;
+  border-radius: 23px;
+  padding: 10px 16px;
+  font-size: 15px;
   color: var(--text-muted);
   white-space: nowrap;
 }
@@ -615,19 +624,19 @@
   background: var(--text);
   color: var(--bg);
   font-weight: 600;
-  font-size: 14px;
-  min-height: 44px;
-  padding: 0 22px;
-  border-radius: 24px;
+  font-size: 16px;
+  min-height: 51px;
+  padding: 0 25px;
+  border-radius: 28px;
 }
 .folder-picker__add {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   color: var(--text);
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 600;
-  min-height: var(--thumb);
+  min-height: var(--thumb-lg);
   padding: 12px 0;
 }
 .folder-picker__list {
@@ -639,45 +648,45 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 52px;
+  min-height: 60px;
   padding: 8px 0;
   border-bottom: 1px solid var(--border);
-  font-size: 14px;
+  font-size: 16px;
 }
 .folder-picker__name {
   color: var(--text);
 }
 .folder-picker__remove {
   color: var(--danger);
-  font-size: 13px;
-  min-height: 40px;
+  font-size: 15px;
+  min-height: 46px;
   padding: 0 6px;
 }
 .folder-picker__rescan {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--text-muted);
   border: 1px solid var(--border-strong);
-  border-radius: 22px;
-  min-height: 44px;
-  padding: 0 16px;
+  border-radius: 25px;
+  min-height: 51px;
+  padding: 0 18px;
   margin: 10px 0 4px;
 }
 .folder-picker__progress {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12.5px;
+  font-size: 14.5px;
   color: var(--accent);
   padding: 6px 0;
 }
 .folder-picker__count {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--text-faint);
   padding: 2px 0 6px;
 }
 .folder-picker__unsupported {
   padding: 16px 0;
-  font-size: 13.5px;
+  font-size: 15.5px;
   color: var(--text-muted);
   line-height: 1.5;
 }
@@ -712,37 +721,37 @@
   width: 100%;
   text-align: left;
   padding: 10px 20px;
-  font-size: 14px;
+  font-size: 16px;
   color: var(--text-muted);
 }
 .search-view__empty {
   padding: 40px 24px;
   text-align: center;
   color: var(--text-faint);
-  font-size: 13.5px;
+  font-size: 15.5px;
 }
 .search-result {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   padding: 7px 20px;
 }
 .search-result--text {
   color: var(--text);
-  font-size: 14px;
+  font-size: 16px;
 }
 .search-result--current {
   background: var(--accent-wash);
 }
 .search-result__art {
-  width: 44px;
-  height: 44px;
+  width: 50px;
+  height: 50px;
   flex-shrink: 0;
 }
 
 /* Queue */
 .queue-view__mode {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--text-faint);
 }
 .queue-view__row {
@@ -760,7 +769,7 @@
   align-items: center;
   gap: 5px;
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--text-muted);
 }
 .queue-view__row.is-removing {
@@ -771,8 +780,8 @@
   pointer-events: none;
 }
 .queue-view__remove {
-  width: 40px;
-  height: 40px;
+  width: 46px;
+  height: 46px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -799,11 +808,11 @@
   padding-bottom: var(--space-6);
 }
 .settings-overlay__storage {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--text);
 }
 .settings-overlay__note {
-  font-size: 12.5px;
+  font-size: 14.5px;
   color: var(--text-faint);
   line-height: 1.5;
   margin-top: 4px;
@@ -811,12 +820,12 @@
 .settings-overlay__sample-btn {
   display: inline-flex;
   align-items: center;
-  min-height: var(--thumb);
-  padding: 0 18px;
+  min-height: var(--thumb-lg);
+  padding: 0 21px;
   border: 1px solid var(--border-strong);
-  border-radius: 22px;
+  border-radius: 25px;
   color: var(--text);
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 500;
 }
 .settings-overlay__sample-btn:disabled {
@@ -825,7 +834,7 @@
 .settings-overlay__row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 .settings-overlay__input {
@@ -936,7 +945,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  min-height: var(--thumb);
+  min-height: var(--thumb-lg);
   padding: 4px 0;
   cursor: pointer;
 }
@@ -946,11 +955,11 @@
   gap: 8px;
 }
 .toggle-row__label {
-  font-size: 14.5px;
+  font-size: 16.5px;
   color: var(--text);
 }
 .toggle-row__desc {
-  font-size: 12.5px;
+  font-size: 14.5px;
   color: var(--text-faint);
   line-height: 1.4;
 }
@@ -968,17 +977,17 @@
 }
 .toggle-switch__track {
   display: block;
-  width: 46px;
-  height: 28px;
-  border-radius: 16px;
+  width: 53px;
+  height: 32px;
+  border-radius: 18px;
   background: var(--surface-hover);
   border: 1px solid var(--border-strong);
   transition: background-color var(--duration-fast) var(--ease-sharp);
 }
 .toggle-switch__thumb {
   display: block;
-  width: 22px;
-  height: 22px;
+  width: 25px;
+  height: 25px;
   margin: 2px;
   border-radius: 50%;
   background: var(--text-faint);
@@ -990,7 +999,7 @@
 }
 .toggle-switch.is-on .toggle-switch__thumb {
   background: var(--bg);
-  transform: translateX(18px);
+  transform: translateX(21px);
 }
 
 /* ============================================================

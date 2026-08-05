@@ -97,6 +97,7 @@ export async function upsertFromScan({
     favorite: existing?.favorite ?? 0, // 0/1, not boolean — IndexedDB index keys can't be booleans
     rating: existing?.rating ?? 0,
     lyrics: tags.lyrics ?? null, // { synced: [{time,text}]|null, text: string|null } | null
+    lyricsCheckedAt: existing?.lyricsCheckedAt ?? null, // ms epoch — last time we asked LRCLIB, used to throttle retries on a confirmed-missing result
     metadataSchemaVersion: METADATA_SCHEMA_VERSION,
   };
 
@@ -144,12 +145,20 @@ export async function markMissing(id, missing) {
   return song;
 }
 
+/**
+ * Persists a lyrics result — found, or a confirmed `false` ("LRCLIB has
+ * nothing for this track") — and always stamps `lyricsCheckedAt` with the
+ * current time. That stamp is what lets AudioEngine's retry-on-play logic
+ * throttle itself (see LYRICS_RECHECK_COOLDOWN_MS in lrclib.js) instead of
+ * re-querying LRCLIB every single time a lyrics-less song is played.
+ */
 export async function setLyrics(id, lyrics) {
   const db = await getDb();
   const tx = db.transaction("songs", "readwrite");
   const song = await tx.store.get(id);
   if (song) {
     song.lyrics = lyrics;
+    song.lyricsCheckedAt = Date.now();
     await tx.store.put(song);
   }
   await tx.done;

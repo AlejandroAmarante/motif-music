@@ -32,7 +32,7 @@ export function FolderPicker() {
         onClick={addFolder}
         disabled={scanning}
       >
-        <Plus size={18} strokeWidth={2} />
+        <Plus size={21} strokeWidth={2} />
         Connect a folder
       </button>
 

@@ -4,6 +4,8 @@ import {
   addLibraryFolder,
   createMotifMusicFolder,
   hasMotifMusicFolder,
+  listLibraryFolders,
+  removeLibraryFolder,
   scanAllFolders,
   scanFoundNoMusic,
   DuplicateFolderError,
@@ -35,12 +37,25 @@ export function SetupFlow({ onComplete }) {
   const [error, setError] = useState(null);
   const [folderRecord, setFolderRecord] = useState(null);
   const [motifFolderTaken, setMotifFolderTaken] = useState(false);
+  // Populated whenever this flow is entered with folder(s) already
+  // connected — most commonly after "Reset Setup" from Settings, which
+  // deliberately leaves the library intact and only replays onboarding.
+  const [connectedFolders, setConnectedFolders] = useState([]);
 
   const supported = isFileSystemAccessSupported();
 
-  useEffect(() => {
-    hasMotifMusicFolder().then(setMotifFolderTaken);
+  const refreshFolderState = useCallback(async () => {
+    const [folders, taken] = await Promise.all([
+      listLibraryFolders(),
+      hasMotifMusicFolder(),
+    ]);
+    setConnectedFolders(folders);
+    setMotifFolderTaken(taken);
   }, []);
+
+  useEffect(() => {
+    refreshFolderState();
+  }, [refreshFolderState]);
 
   // Lets someone get into the app immediately without connecting a
   // folder. Every view already has an empty-library fallback (Home,
@@ -49,6 +64,11 @@ export function SetupFlow({ onComplete }) {
   // just means folders is an empty array, which those views already
   // handle gracefully.
   const handleSkip = useCallback(async () => {
+    await markSetupComplete();
+    onComplete();
+  }, [onComplete]);
+
+  const finish = useCallback(async () => {
     await markSetupComplete();
     onComplete();
   }, [onComplete]);
@@ -95,6 +115,29 @@ export function SetupFlow({ onComplete }) {
     }
   }, [goToFolderResult]);
 
+  const handleDisconnectFolder = useCallback(
+    async (id) => {
+      setError(null);
+      setBusy(true);
+      try {
+        await removeLibraryFolder(id);
+        await refreshFolderState();
+      } catch (err) {
+        setError(err.message || "Could not disconnect that folder.");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [refreshFolderState],
+  );
+
+  // Already-connected folders are already scanned and part of the
+  // library — nothing more to do here beyond letting the user finish
+  // onboarding, same as reaching the "done" step any other way.
+  const handleContinueWithExisting = useCallback(() => {
+    setStep("done");
+  }, []);
+
   const handleAddSample = useCallback(async () => {
     if (!folderRecord) {
       setStep("done");
@@ -116,11 +159,6 @@ export function SetupFlow({ onComplete }) {
     setBusy(false);
     setStep("done");
   }, [folderRecord]);
-
-  const finish = useCallback(async () => {
-    await markSetupComplete();
-    onComplete();
-  }, [onComplete]);
 
   if (step === "welcome") {
     return (
@@ -180,13 +218,54 @@ export function SetupFlow({ onComplete }) {
   }
 
   if (step === "folder") {
+    const hasConnected = connectedFolders.length > 0;
     return (
       <StepShell>
         <h1 className="setup-flow__title">Set up your music folder</h1>
-        <p className="setup-flow__body">
-          Choose an existing folder of music, or let Motif create one for you.
-        </p>
-        {error && <p className="setup-flow__error">{error}</p>}
+
+        {hasConnected ? (
+          <>
+            <p className="setup-flow__body">
+              {connectedFolders.length === 1
+                ? "You already have a folder connected:"
+                : `You already have ${connectedFolders.length} folders connected:`}
+            </p>
+            <ul className="folder-picker__list">
+              {connectedFolders.map((folder) => (
+                <li key={folder.id} className="folder-picker__item">
+                  <span className="folder-picker__name">{folder.name}</span>
+                  <button
+                    className="folder-picker__remove"
+                    onClick={() => handleDisconnectFolder(folder.id)}
+                    disabled={busy}
+                    aria-label={`Disconnect ${folder.name}`}
+                  >
+                    Disconnect
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {error && <p className="setup-flow__error">{error}</p>}
+            <button
+              className="setup-flow__cta"
+              onClick={handleContinueWithExisting}
+              disabled={busy}
+            >
+              Continue with {connectedFolders.length === 1 ? "this folder" : "these folders"}
+            </button>
+            <p className="setup-flow__body" style={{ marginTop: 4 }}>
+              Or connect another folder:
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="setup-flow__body">
+              Choose an existing folder of music, or let Motif create one for you.
+            </p>
+            {error && <p className="setup-flow__error">{error}</p>}
+          </>
+        )}
+
         <div className="setup-flow__options">
           <button
             className="setup-flow__option"
@@ -197,7 +276,7 @@ export function SetupFlow({ onComplete }) {
               Use Existing Folder
             </span>
             <span className="setup-flow__option-desc">
-              Point Motif at a folder of music you already have.
+              Point Motif at {hasConnected ? "another" : "a"} folder of music you already have.
             </span>
           </button>
           {!motifFolderTaken && (

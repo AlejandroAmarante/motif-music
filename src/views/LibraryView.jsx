@@ -69,12 +69,15 @@ export function LibraryView({ onOpenFolders }) {
           onClick={onOpenFolders}
           aria-label="Manage connected folders"
         >
-          <FolderCog size={20} strokeWidth={1.8} />
+          <FolderCog size={23} strokeWidth={1.8} />
         </button>
       </header>
 
       <div className="library-view__search">
         <div className="search-view__input-wrap">
+          {/* This icon lives inside the (deliberately unscaled) filter
+              input, so it stays at its original size to match — see the
+              size-pass notes in app.css for the general rule. */}
           <Search size={17} strokeWidth={2} />
           <input
             className="search-view__input"
@@ -97,7 +100,7 @@ export function LibraryView({ onOpenFolders }) {
               onClick={clearAlbumFilter}
             >
               {albumFilter.name}
-              <X size={14} strokeWidth={2.2} />
+              <X size={16} strokeWidth={2.2} />
             </button>
           </div>
         )}

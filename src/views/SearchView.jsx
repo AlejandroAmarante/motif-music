@@ -72,6 +72,8 @@ export function SearchView() {
 
       <div className="library-view__search">
         <div className="search-view__input-wrap">
+          {/* Kept at its original size — it's inside the (deliberately
+              unscaled) search input, not a standalone page element. */}
           <Search size={17} strokeWidth={2} />
           <input
             className="search-view__input"

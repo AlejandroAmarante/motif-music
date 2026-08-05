@@ -16,7 +16,7 @@ function Rail({ title, icon: Icon, songs, onPlay }) {
       <h2 className="home-rail__title">
         {Icon && (
           <span className="home-rail__icon" aria-hidden="true">
-            <Icon size={17} strokeWidth={1.8} />
+            <Icon size={20} strokeWidth={1.8} />
           </span>
         )}
         {title}
@@ -61,7 +61,7 @@ export function HomeView({ onOpenSettings }) {
           onClick={onOpenSettings}
           aria-label="Settings"
         >
-          <Settings size={20} strokeWidth={1.8} />
+          <Settings size={23} strokeWidth={1.8} />
         </button>
       </header>
 

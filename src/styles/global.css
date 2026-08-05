@@ -48,6 +48,12 @@
   --radius-md: 12px;
   --radius-lg: 20px;
   --thumb: 50px; /* minimum touch target */
+  /* ~15% larger touch target, used for buttons within Home/Library/Search/
+     Queue/Settings (and a couple of shared button classes reused inside
+     Now Playing/Lyrics). Deliberately a separate token from --thumb rather
+     than scaling --thumb itself, since --thumb is also used for text
+     input min-height and the bottom nav, neither of which should grow. */
+  --thumb-lg: 58px;
 
   /* Motion — shared across modals, sheets, toasts, and list transitions
      so nothing in the app moves on its own timing. */

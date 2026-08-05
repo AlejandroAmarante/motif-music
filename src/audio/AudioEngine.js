@@ -11,7 +11,7 @@ import {
   handleLoadFailure,
   handleLoadSuccess,
 } from "../library/missingFiles.js";
-import { fetchLrclibLyrics } from "../library/lrclib.js";
+import { fetchLrclibLyrics, LYRICS_RECHECK_COOLDOWN_MS } from "../library/lrclib.js";
 import {
   prefetchAlbumArtwork,
   albumArtworkContext,
@@ -230,17 +230,27 @@ export class AudioEngine {
     if (!song || song.lyrics !== false || this._lyricsRecheckedThisTrack)
       return;
     this._lyricsRecheckedThisTrack = true;
+
+    // A confirmed "not found" result carries a timestamp of when it was
+    // last confirmed (see songsRepo.setLyrics) — skip hitting LRCLIB again
+    // until that cooldown has passed, so a song with no lyrics doesn't
+    // fire a fresh request to a free, community-run API every single time
+    // it happens to be played.
+    const lastChecked = song.lyricsCheckedAt ?? 0;
+    if (Date.now() - lastChecked < LYRICS_RECHECK_COOLDOWN_MS) return;
+
     const result = await fetchLrclibLyrics({
       title: song.title,
       artist: song.artist,
       album: song.album,
       duration: song.duration,
     });
-    if (result && result !== false) {
-      song.lyrics = result;
-      setLyrics(song.id, result).catch(() => {});
-      this._emit();
-    }
+    if (result === null) return; // network/CORS hiccup — not a confirmed answer, don't stamp or cache it
+
+    song.lyrics = result === false ? false : result;
+    song.lyricsCheckedAt = Date.now();
+    setLyrics(song.id, song.lyrics).catch(() => {});
+    this._emit();
   }
 
   _bindAudioEvents() {
