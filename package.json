@@ -6,6 +6,7 @@
   "description": "Local-first music player & discovery PWA. Your library, not a subscription.",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node scripts/generate-icons.mjs",
     "build": "vite build",
     "preview": "vite preview"
   },
@@ -23,6 +24,7 @@
     "@babel/core": "^8.0.1",
     "@babel/plugin-transform-runtime": "^8.0.1",
     "@vitejs/plugin-react": "^6.0.5",
+    "sharp": "^0.35.3",
     "vite": "^8.2.0",
     "vite-plugin-pwa": "^1.3.0"
   }
