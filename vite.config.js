@@ -9,26 +9,36 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
-      // The app registers the service worker itself, in
-      // src/state/UpdateContext.jsx (via virtual:pwa-register/react), so it
-      // can expose manual "Check for Updates" + "Automatically check for
-      // updates" controls in Settings. Leaving this on would register a
-      // second, independent instance of the same worker.
+
+      // Registered manually via UpdateContext.jsx
       injectRegister: false,
-      includeAssets: ["icons/*.svg"],
+
+      includeAssets: ["icons/*.svg", "icons/*.png", "favicon.ico"],
+
       manifest: {
+        id: "/motif-music/",
+
         name: "Motif — Local-First Music",
         short_name: "Motif",
         description:
           "Your library, not a subscription. Local-first music player and discovery.",
+
         theme_color: "#000000",
         background_color: "#000000",
+
         display: "standalone",
+        display_override: [
+          "window-controls-overlay",
+          "standalone",
+          "minimal-ui",
+        ],
+
         orientation: "portrait",
 
-        // Important for GitHub Pages
         start_url: "/motif-music/",
         scope: "/motif-music/",
+
+        categories: ["music", "audio", "entertainment", "utilities"],
 
         icons: [
           {
@@ -50,9 +60,77 @@ export default defineConfig({
             purpose: "maskable",
           },
         ],
+
+        screenshots: [
+          {
+            src: "screenshots/home.png",
+            sizes: "1080x1920",
+            type: "image/png",
+            form_factor: "narrow",
+            label: "Home library",
+          },
+          {
+            src: "screenshots/now-playing.png",
+            sizes: "1080x1920",
+            type: "image/png",
+            form_factor: "narrow",
+            label: "Now Playing",
+          },
+          {
+            src: "screenshots/library-desktop.png",
+            sizes: "1920x1080",
+            type: "image/png",
+            form_factor: "wide",
+            label: "Desktop library",
+          },
+        ],
+
+        shortcuts: [
+          {
+            name: "Library",
+            short_name: "Library",
+            url: "/motif-music/#/library",
+          },
+          {
+            name: "Search",
+            short_name: "Search",
+            url: "/motif-music/#/search",
+          },
+          {
+            name: "Now Playing",
+            short_name: "Player",
+            url: "/motif-music/#/player",
+          },
+        ],
+
+        launch_handler: {
+          client_mode: ["focus-existing", "auto"],
+        },
+
+        file_handlers: [
+          {
+            action: "/motif-music/",
+            accept: {
+              "audio/*": [
+                ".mp3",
+                ".flac",
+                ".m4a",
+                ".aac",
+                ".ogg",
+                ".opus",
+                ".wav",
+              ],
+            },
+          },
+        ],
       },
+
       workbox: {
-        globPatterns: ["**/*.{js,css,html,svg}"],
+        globPatterns: ["**/*.{js,css,html,png,svg,ico,webmanifest}"],
+
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
       },
     }),
   ],
