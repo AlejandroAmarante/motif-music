@@ -29,6 +29,7 @@ export class AudioEngine {
     this._buffering = false;
     this._scrubbing = false;
     this._wasPlayingBeforeScrub = false;
+    this._playToken = 0;
     this._lyricsRecheckedThisTrack = false;
     this._countedThisTrack = false;
     this._consecutiveFailures = 0;
@@ -126,17 +127,30 @@ export class AudioEngine {
   }
 
   async play() {
+    // Every pause()/play() call bumps this token. If this call's play()
+    // promise ends up rejected because a *newer* pause() interrupted it
+    // (calling pause() while a play() is still settling is normal browser
+    // behavior, not a bug, and always resolves correctly once the newer
+    // call's own play()/pause() finishes) — the newer call is already the
+    // authoritative one for final playback state, so this stale rejection
+    // is expected and safe to swallow silently rather than logging a
+    // misleading warning for something that already resolved correctly.
+    this._playToken += 1;
+    const token = this._playToken;
     try {
       await this.audio.play();
     } catch (err) {
-      console.warn(
-        "[motif/audio] play() rejected (likely needs a user gesture):",
-        err.message,
-      );
+      if (token === this._playToken) {
+        console.warn(
+          "[motif/audio] play() rejected (likely needs a user gesture):",
+          err.message,
+        );
+      }
     }
   }
 
   pause() {
+    this._playToken += 1; // invalidates any in-flight play()'s warning, same reasoning as above
     this.audio.pause();
   }
 
@@ -149,7 +163,17 @@ export class AudioEngine {
     if (Number.isFinite(time)) this.audio.currentTime = time;
   }
 
+  /**
+   * Scrubbing is a single, explicit begin → (state updates only) → end
+   * sequence with exactly one pause() and, at most, one play() — no
+   * playback calls happen in between while dragging, and there's never
+   * more than one scrub "session" open at a time (beginScrub is a no-op
+   * if one is already in progress). endScrub always performs exactly one
+   * seek, then resumes playback exactly once if it was playing before the
+   * scrub started, or leaves it paused if it wasn't.
+   */
   beginScrub() {
+    if (this._scrubbing) return;
     this._scrubbing = true;
     this._wasPlayingBeforeScrub = !this.audio.paused;
     this.audio.pause();

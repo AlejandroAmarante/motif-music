@@ -13,6 +13,8 @@ import { useLibrary } from "../state/LibraryContext.jsx";
 import { useUpdateManager } from "../state/UpdateContext.jsx";
 import { getSetting, setSetting } from "../db/settingsRepo.js";
 import { resetSetup } from "../setup/setupState.js";
+import { ensurePermission } from "../db/directoryHandlesRepo.js";
+import { importSampleTrack } from "../setup/sampleTrackImport.js";
 import { pushToast } from "../state/toastBus.js";
 import { Toggle } from "../components/common/Toggle.jsx";
 
@@ -49,7 +51,14 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
   const { shouldRender, entered } = useMountTransition(isOpen, 280);
   const [discogsToken, setDiscogsToken] = useState("");
   const [resettingSetup, setResettingSetup] = useState(false);
-  const { supported, motifFolderExists, createMotifFolder } = useLibrary();
+  const [addingSample, setAddingSample] = useState(false);
+  const {
+    supported,
+    motifFolderExists,
+    createMotifFolder,
+    folders,
+    rescan,
+  } = useLibrary();
   const {
     needRefresh,
     checking,
@@ -75,6 +84,31 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
       pushToast(err.message || "Couldn't reset setup — try again.", {
         type: "error",
       });
+    }
+  };
+
+  // Same import used during first-run setup, just reachable any time
+  // afterward too. Targets the first connected folder — good enough for
+  // the common single-folder case; someone managing several folders can
+  // already see which one it landed in via "Manage connected folders".
+  const handleAddSampleTrack = async () => {
+    if (!folders.length) return;
+    setAddingSample(true);
+    try {
+      const target = folders[0];
+      const granted = await ensurePermission(target.handle, "readwrite");
+      if (!granted) {
+        throw new Error("Permission to write to this folder was denied.");
+      }
+      await importSampleTrack(target.handle);
+      await rescan();
+      pushToast("Sample track added to your library.", { type: "success" });
+    } catch (err) {
+      pushToast(err.message || "Could not add the sample track.", {
+        type: "error",
+      });
+    } finally {
+      setAddingSample(false);
     }
   };
 
@@ -111,6 +145,19 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
             >
               Create Motif Music Folder
             </button>
+          )}
+          <button
+            className="settings-overlay__sample-btn"
+            style={{ marginTop: 10 }}
+            onClick={handleAddSampleTrack}
+            disabled={addingSample || folders.length === 0}
+          >
+            {addingSample ? "Adding sample track…" : "Add sample track"}
+          </button>
+          {folders.length === 0 && (
+            <p className="settings-overlay__note">
+              Connect a folder above to enable this.
+            </p>
           )}
         </section>
 

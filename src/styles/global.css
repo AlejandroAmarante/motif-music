@@ -54,6 +54,14 @@
      than scaling --thumb itself, since --thumb is also used for text
      input min-height and the bottom nav, neither of which should grow. */
   --thumb-lg: 58px;
+  /* .view__header is now an absolutely-positioned glass overlay (see
+     app.css) rather than a normal flex sibling, so it no longer reserves
+     its own space — content that used to just follow it in flow needs an
+     explicit offset instead. This is that header's height (excluding the
+     safe-area inset, which gets added on top wherever this is used):
+     14px top padding + a --thumb-lg-tall title/action row + 8px
+     (--space-2) bottom padding. */
+  --header-height: 80px;
 
   /* Motion — shared across modals, sheets, toasts, and list transitions
      so nothing in the app moves on its own timing. */

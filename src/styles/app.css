@@ -183,13 +183,23 @@
   text-transform: uppercase;
   color: var(--text-faint);
 }
+.now-playing__flex-spacer {
+  /* Splits any leftover vertical space evenly above and below the whole
+     artwork+meta+seek+transport block, so that block is genuinely
+     centered as one composition — rather than only the artwork centering
+     within its own separately-stretchy region while everything below it
+     stays anchored to the bottom (which is what made the layout feel
+     bottom-heavy). Both spacers shrink to 0 on short screens, same as
+     before, so nothing regresses there. */
+  flex: 1 1 0%;
+  min-height: 8px;
+}
 .now-playing__art-wrap {
-  flex: 1;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 0;
-  padding: 8px 0 28px;
+  padding: 8px 0 24px;
 }
 .now-playing__art {
   width: min(78vw, 340px);
@@ -199,15 +209,6 @@
 }
 .now-playing__art .motif-mark { height: 22%; }
 .now-playing__meta {
-  /* Pulls meta (and everything stacked after it — seek, transport) up
-     toward the artwork, without touching .now-playing__art-wrap at all.
-     That's deliberate: art-wrap is flex:1 and centers the artwork within
-     whatever leftover space it's given, so changing ITS sizing to "make
-     room" would also shift the artwork's own position — the one thing
-     that was asked not to move. A negative margin here instead pulls this
-     block up into art-wrap's already-empty bottom padding, which is
-     unoccupied space below the artwork, not the artwork itself. */
-  margin-top: -16px;
   padding-bottom: 18px;
 }
 .now-playing__title {
@@ -439,13 +440,33 @@
   flex-direction: column;
   min-height: 0;
   flex: 1;
+  position: relative;
 }
 .view__header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: calc(var(--safe-top) + 14px) 20px var(--space-2);
-  flex-shrink: 0;
+  /* Genuinely invisible at rest, not just subtle — background is pure
+     black (matching --bg exactly, not --bg-elevated, which reads as a
+     visibly distinct panel against the page). Blurring a flat black
+     background is a no-op, so with nothing scrolled underneath yet this
+     is indistinguishable from no header treatment at all. The blur only
+     does anything once actual content — album art, text, whatever's
+     scrolling past — passes underneath it; no scroll listener or class
+     toggling involved, it's just a property of what's currently behind
+     it. No border or shadow either, since either would read as a
+     permanent panel edge regardless of what's behind it. Opacity is
+     enough to preserve title/icon contrast once something bright does
+     scroll underneath, without tinting the resting black state. */
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
 }
 .view__header h1 {
   font-size: 32px;
@@ -468,6 +489,21 @@
   flex: 1;
   min-height: 0;
   padding-bottom: 24px;
+}
+/* .view__header is an absolutely-positioned overlay now (see above), so it
+   no longer pushes content down on its own — these compensate for exactly
+   that, on whichever element actually sits first after the header in each
+   view. Scoped per-view (rather than applied to .view__scroll generally)
+   because .view__scroll is also reused inside Settings/Connected Folders,
+   which use a different, non-overlaid header and would be pushed down
+   twice if this applied there too. */
+.home-view > .view__scroll,
+.queue-view > .view__scroll {
+  padding-top: calc(var(--safe-top) + var(--header-height));
+}
+.library-view > .library-view__search,
+.search-view > .library-view__search {
+  margin-top: calc(var(--safe-top) + var(--header-height));
 }
 
 /* Home */
@@ -818,12 +854,14 @@
   margin-top: 4px;
 }
 .settings-overlay__sample-btn {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: center;
+  width: 100%;
   min-height: var(--thumb-lg);
   padding: 0 21px;
   border: 1px solid var(--border-strong);
-  border-radius: 25px;
+  border-radius: var(--radius-md);
   color: var(--text);
   font-size: 16px;
   font-weight: 500;

@@ -115,6 +115,18 @@ export function NowPlaying() {
     // declaration above.
   };
 
+  // Safety net for a drag that never gets a proper release event — pointer
+  // capture lost to a system dialog, the tab losing focus mid-drag, etc.
+  // Without this, draggingRef would stay stuck true and playback would
+  // stay paused indefinitely since endScrub would never run. Committing
+  // with whatever the last known drag position was keeps this behaving
+  // exactly like a normal release.
+  const handleSeekBlur = () => {
+    if (draggingRef.current) {
+      handleSeekCommit(dragValue ?? smoothTime);
+    }
+  };
+
   return (
     <div
       className={`now-playing${entered ? " is-open" : ""}`}
@@ -141,6 +153,8 @@ export function NowPlaying() {
         </button>
       </div>
 
+      <div className="now-playing__flex-spacer" aria-hidden="true" />
+
       <div className="now-playing__art-wrap">
         <Artwork
           song={current}
@@ -155,7 +169,7 @@ export function NowPlaying() {
         <p className="now-playing__artist">{current.artist}</p>
       </div>
 
-      <div className="now-playing__seek" {...isolateDrag}>
+      <div className="now-playing__seek" {...isolateDrag} onBlur={handleSeekBlur}>
         <SeekBar
           value={displayedTime}
           max={duration || 0}
@@ -232,6 +246,8 @@ export function NowPlaying() {
           aria-label="Volume"
         />
       </div>
+
+      <div className="now-playing__flex-spacer" aria-hidden="true" />
 
       <LyricsView
         isOpen={lyricsOpen}
