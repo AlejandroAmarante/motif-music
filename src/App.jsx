@@ -1,7 +1,9 @@
+// src/App.jsx — full updated file
 import { useEffect, useState } from "react";
 import { LibraryProvider } from "./state/LibraryContext.jsx";
 import { PlayerProvider, usePlayer } from "./state/PlayerContext.jsx";
 import { UpdateProvider } from "./state/UpdateContext.jsx";
+import { NavigationProvider } from "./state/NavigationContext.jsx";
 import { BottomNav } from "./components/layout/BottomNav.jsx";
 import { MiniPlayer } from "./components/player/MiniPlayer.jsx";
 import { NowPlaying } from "./components/player/NowPlaying.jsx";
@@ -12,6 +14,7 @@ import { SearchView } from "./views/SearchView.jsx";
 import { QueueView } from "./views/QueueView.jsx";
 import { SettingsView } from "./views/SettingsView.jsx";
 import { ConnectedFoldersView } from "./views/ConnectedFoldersView.jsx";
+import { DetailOverlay } from "./views/DetailOverlay.jsx";
 import { SetupFlow } from "./views/SetupFlow.jsx";
 import { isSetupComplete, markSetupComplete } from "./setup/setupState.js";
 import { listLibraryFolders } from "./library/libraryManager.js";
@@ -45,6 +48,7 @@ function AppShell() {
       {current && <MiniPlayer />}
       <BottomNav active={tab} onChange={setTab} />
       <NowPlaying />
+      <DetailOverlay />
       <SettingsView
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}
@@ -94,7 +98,9 @@ export default function App() {
     <LibraryProvider>
       <PlayerProvider>
         <UpdateProvider>
-          <AppShell />
+          <NavigationProvider>
+            <AppShell />
+          </NavigationProvider>
         </UpdateProvider>
       </PlayerProvider>
     </LibraryProvider>

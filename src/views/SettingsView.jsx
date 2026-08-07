@@ -1,8 +1,10 @@
+// src/views/SettingsView.jsx — full updated file (added "Artist Photos" / Last.fm key section)
 import { useEffect, useState } from "react";
 import {
   ChevronDown,
   Library,
   Image,
+  Users,
   RefreshCw,
   HardDrive,
   RotateCcw,
@@ -40,6 +42,7 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
   const estimate = useStorageEstimate();
   const { shouldRender, entered } = useMountTransition(isOpen, 280);
   const [discogsToken, setDiscogsToken] = useState("");
+  const [lastfmApiKey, setLastfmApiKey] = useState("");
   const [resettingSetup, setResettingSetup] = useState(false);
   const [addingSample, setAddingSample] = useState(false);
   const { supported, motifFolderExists, createMotifFolder, folders, rescan } =
@@ -55,6 +58,7 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
 
   useEffect(() => {
     getSetting("discogsToken", "").then((v) => setDiscogsToken(v || ""));
+    getSetting("lastfmApiKey", "").then((v) => setLastfmApiKey(v || ""));
   }, []);
 
   const handleResetSetup = async () => {
@@ -162,6 +166,26 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
             onChange={(e) => setDiscogsToken(e.target.value)}
             onBlur={() =>
               setSetting("discogsToken", discogsToken.trim() || null)
+            }
+          />
+        </section>
+
+        <section>
+          <SectionTitle icon={Users}>Artist Photos</SectionTitle>
+          <p className="settings-overlay__note" style={{ marginBottom: 8 }}>
+            Artist tags and info come from MusicBrainz automatically. For artist
+            photos specifically, add a free Last.fm API key below — without one,
+            the Artist page falls back to a photo from one of the artist's own
+            albums.
+          </p>
+          <input
+            className="settings-overlay__input"
+            type="text"
+            placeholder="Last.fm API key (optional)"
+            value={lastfmApiKey}
+            onChange={(e) => setLastfmApiKey(e.target.value)}
+            onBlur={() =>
+              setSetting("lastfmApiKey", lastfmApiKey.trim() || null)
             }
           />
         </section>

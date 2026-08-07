@@ -145,6 +145,7 @@ button {
   border: none;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  padding: 0;
 }
 
 button:focus-visible,

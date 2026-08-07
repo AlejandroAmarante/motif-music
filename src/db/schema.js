@@ -1,3 +1,4 @@
+// src/db/schema.js — DB_VERSION bumped 2 → 3
 // Motif database schema.
 //
 // This is a *concrete* IndexedDB layer, not an abstracted "storage driver"
@@ -7,7 +8,7 @@
 // never mutate a released version's store definitions in place.
 
 export const DB_NAME = "motif";
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 // versioned metadata schema tag stored per-song, independent of DB_VERSION —
 // this is what lets the metadata *shape* evolve (new extracted fields) without
@@ -85,5 +86,21 @@ export function upgrade(db, oldVersion) {
     // either a resolved result (artworkId and/or artworkUrl, provider,
     // mbid once known) or a cached failure with a retry cooldown.
     db.createObjectStore("albumArtwork", { keyPath: "key" });
+  }
+
+  if (oldVersion < 3) {
+    // --- Artist page enrichment cache (see src/artwork/artistMetaManager.js) ---
+    // Keyed by Motif's own artist id. Holds a resolved photo (a remote
+    // Last.fm URL, or a local fallback artworkId borrowed from one of the
+    // artist's own albums), a handful of genre tags, and a bio snippet —
+    // or a cached failure with a retry cooldown, same shape as
+    // albumArtwork above.
+    db.createObjectStore("artistMeta", { keyPath: "key" });
+
+    // --- Album page enrichment cache (see src/artwork/albumMetaManager.js) ---
+    // Keyed by Motif's own album id. Holds supplementary release info
+    // (release date, country, status) resolved from MusicBrainz — or a
+    // cached failure with a retry cooldown.
+    db.createObjectStore("albumMeta", { keyPath: "key" });
   }
 }

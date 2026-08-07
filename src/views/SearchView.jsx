@@ -1,8 +1,10 @@
+// src/views/SearchView.jsx — full updated file (artist/album results now open the detail views)
 import { useState, useCallback } from "react";
 import { Search } from "lucide-react";
 import { useDebouncedSearch } from "../state/useDebouncedSearch.js";
 import { useLibrary } from "../state/LibraryContext.jsx";
 import { usePlayer } from "../state/PlayerContext.jsx";
+import { useNavigation } from "../state/NavigationContext.jsx";
 import { Artwork } from "../components/common/Artwork.jsx";
 
 const RECENTS_KEY = "motif:recentSearches";
@@ -26,6 +28,7 @@ function saveRecents(list) {
 export function SearchView() {
   const { version } = useLibrary();
   const { playSongs } = usePlayer();
+  const { openArtist, openAlbum } = useNavigation();
   const [query, setQuery] = useState("");
   const results = useDebouncedSearch(query, version);
   const [recents, setRecents] = useState(loadRecents);
@@ -118,6 +121,9 @@ export function SearchView() {
               <div
                 key={artist.id}
                 className="search-result search-result--text"
+                onClick={() => openArtist(artist.id)}
+                role="button"
+                tabIndex={0}
               >
                 {artist.name}
               </div>
@@ -129,7 +135,13 @@ export function SearchView() {
           <section>
             <h2 className="home-rail__title">Albums</h2>
             {results.albums.map((album) => (
-              <div key={album.id} className="search-result search-result--text">
+              <div
+                key={album.id}
+                className="search-result search-result--text"
+                onClick={() => openAlbum(album.id)}
+                role="button"
+                tabIndex={0}
+              >
                 {album.name}
               </div>
             ))}

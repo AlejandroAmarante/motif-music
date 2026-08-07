@@ -1,3 +1,4 @@
+// src/db/songsRepo.js — added getByArtistId / countByArtistId, everything else unchanged
 import { getDb } from "./db.js";
 import { makeId, normalize } from "../utils/id.js";
 import { getOrCreateArtist, adjustArtistSongCount } from "./artistsRepo.js";
@@ -187,6 +188,22 @@ export async function getByIds(ids) {
 export async function getByAlbumId(albumId) {
   const db = await getDb();
   return db.getAllFromIndex("songs", "byAlbumId", albumId);
+}
+
+/** All songs credited to an artist (as track artist), for the Artist view. */
+export async function getByArtistId(artistId) {
+  const db = await getDb();
+  return db.getAllFromIndex("songs", "byArtistId", artistId);
+}
+
+/**
+ * Cheap existence/size check for an artist's local catalog — used by the
+ * Now Playing "which artist" navigation choice, where we only need to know
+ * whether there's more than one track, not the tracks themselves.
+ */
+export async function countByArtistId(artistId) {
+  const db = await getDb();
+  return db.countFromIndex("songs", "byArtistId", artistId);
 }
 
 export async function getAllLite() {

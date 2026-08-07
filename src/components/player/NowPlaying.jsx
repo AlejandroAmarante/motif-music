@@ -1,3 +1,4 @@
+// src/components/player/NowPlaying.jsx — full updated file
 import { useEffect, useRef, useState } from "react";
 import { useSwipeable } from "react-swipeable";
 import {
@@ -12,11 +13,14 @@ import {
   Repeat1,
 } from "lucide-react";
 import { usePlayer } from "../../state/PlayerContext.jsx";
+import { useNavigation } from "../../state/NavigationContext.jsx";
+import { resolveArtistNavigation } from "../../library/navigation.js";
 import { useMountTransition } from "../../utils/useMountTransition.js";
 import { useSmoothProgress } from "../../utils/useSmoothProgress.js";
 import { Artwork } from "../common/Artwork.jsx";
 import { LyricsView } from "./LyricsView.jsx";
 import { SeekBar } from "./SeekBar.jsx";
+import { ArtistNavigationSheet } from "./ArtistNavigationSheet.jsx";
 import { formatDuration } from "../../utils/formatTime.js";
 
 const isolateDrag = {
@@ -47,9 +51,14 @@ export function NowPlaying() {
     nowPlayingOpen,
     closeNowPlaying,
   } = usePlayer();
+  const { openArtist, openAlbum } = useNavigation();
 
   const [dragValue, setDragValue] = useState(null);
   const [lyricsOpen, setLyricsOpen] = useState(false);
+  // { artistId, albumId } while the "View Artist / View Album" chooser is
+  // showing; null otherwise. See resolveArtistNavigation() for when this
+  // is used versus navigating straight to the artist.
+  const [artistNavChoice, setArtistNavChoice] = useState(null);
   const draggingRef = useRef(false);
   // While seeking, a fast horizontal drag — or the release motion itself —
   // can otherwise be misread by the swipe library as a left/right/down
@@ -88,6 +97,18 @@ export function NowPlaying() {
 
   const resetSeekGuard = () => {
     seekingRef.current = false;
+  };
+
+  const handleArtistTap = async () => {
+    if (!current) return;
+    const result = await resolveArtistNavigation(current);
+    if (!result) return;
+    if (result.type === "choice") {
+      setArtistNavChoice(result);
+    } else {
+      closeNowPlaying();
+      openArtist(result.artistId);
+    }
   };
 
   if (!shouldRender || !current) return null;
@@ -166,10 +187,16 @@ export function NowPlaying() {
 
       <div className="now-playing__meta">
         <h2 className="now-playing__title">{current.title}</h2>
-        <p className="now-playing__artist">{current.artist}</p>
+        <button className="now-playing__artist-btn" onClick={handleArtistTap}>
+          {current.artist}
+        </button>
       </div>
 
-      <div className="now-playing__seek" {...isolateDrag} onBlur={handleSeekBlur}>
+      <div
+        className="now-playing__seek"
+        {...isolateDrag}
+        onBlur={handleSeekBlur}
+      >
         <SeekBar
           value={displayedTime}
           max={duration || 0}
@@ -255,6 +282,24 @@ export function NowPlaying() {
         song={current}
         currentTime={smoothTime}
         onSeekTo={seek}
+      />
+
+      <ArtistNavigationSheet
+        isOpen={artistNavChoice != null}
+        artistName={current.artist}
+        onClose={() => setArtistNavChoice(null)}
+        onViewArtist={() => {
+          const { artistId } = artistNavChoice;
+          setArtistNavChoice(null);
+          closeNowPlaying();
+          openArtist(artistId);
+        }}
+        onViewAlbum={() => {
+          const { albumId } = artistNavChoice;
+          setArtistNavChoice(null);
+          closeNowPlaying();
+          openAlbum(albumId);
+        }}
       />
     </div>
   );

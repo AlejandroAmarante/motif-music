@@ -1,0 +1,271 @@
+/* src/styles/detail.css — NEW, no existing files touched */
+/* ============================================================
+   Detail overlay shell (Artist / Album views)
+   Reuses .settings-overlay for the slide-up/fixed/z-index treatment, but
+   overrides its page padding to zero so an artist's hero photo can run
+   edge-to-edge — the back button floats over the content instead of
+   pushing it down, mirroring .view__header's glass-overlay approach.
+   ============================================================ */
+.detail-overlay {
+  padding: 0;
+}
+.detail-overlay__back {
+  position: absolute;
+  top: calc(var(--safe-top) + 10px);
+  left: 12px;
+  z-index: 5;
+  width: var(--thumb);
+  height: var(--thumb);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 50%;
+}
+.detail-overlay__body {
+  padding-bottom: calc(var(--safe-bottom) + 24px);
+}
+.detail-view__loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-top: 40vh;
+}
+
+/* ============================================================
+   Shared stats / actions row (Artist + Album views)
+   ============================================================ */
+.detail-view__stats {
+  display: flex;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+  padding: var(--space-4) 20px var(--space-2);
+}
+.detail-view__stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 13.5px;
+}
+.detail-view__stat .mono {
+  color: var(--text);
+  font-weight: 500;
+}
+.detail-view__actions {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-2) 20px var(--space-5);
+}
+.detail-view__play-btn,
+.detail-view__shuffle-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--thumb);
+  padding: 0 22px;
+  border-radius: 26px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.detail-view__play-btn {
+  background: var(--text);
+  color: var(--bg);
+}
+.detail-view__shuffle-btn {
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+}
+.detail-view__play-btn:disabled,
+.detail-view__shuffle-btn:disabled {
+  opacity: 0.4;
+}
+
+/* ============================================================
+   Artist view
+   ============================================================ */
+.artist-view__hero {
+  position: relative;
+  height: 42vh;
+  min-height: 260px;
+  display: flex;
+  align-items: flex-end;
+  padding: 0 20px 20px;
+  background-color: var(--surface);
+  background-size: cover;
+  background-position: center 25%;
+}
+.artist-view__hero-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.15) 0%,
+    rgba(0, 0, 0, 0.55) 65%,
+    var(--bg) 100%
+  );
+}
+.artist-view__name {
+  position: relative;
+  z-index: 1;
+  font-size: 34px;
+  line-height: 1.15;
+  color: var(--text);
+}
+.artist-view__tags {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: var(--space-3) 20px 0;
+}
+.artist-view__tag {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  padding: 4px 10px;
+}
+.artist-view__albums-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-4);
+  padding: 0 20px var(--space-6);
+}
+.artist-view__album-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+}
+.artist-view__album-art {
+  width: 100%;
+  aspect-ratio: 1;
+}
+.artist-view__album-art .motif-mark {
+  height: 30%;
+}
+.artist-view__album-name {
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.artist-view__album-year {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+/* ============================================================
+   Album view
+   ============================================================ */
+.album-view__header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: calc(var(--safe-top) + 70px) 32px var(--space-4);
+}
+.album-view__art {
+  width: min(56vw, 240px);
+  height: min(56vw, 240px);
+  margin-bottom: var(--space-3);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+}
+.album-view__art .motif-mark {
+  height: 22%;
+}
+.album-view__title {
+  font-size: 24px;
+  line-height: 1.2;
+  color: var(--text);
+}
+.album-view__artist-link {
+  color: var(--text-muted);
+  font-size: 15px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--border-strong);
+}
+.album-view__subline {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--text-faint);
+}
+.album-view__tracks {
+  padding-bottom: var(--space-6);
+}
+
+/* ============================================================
+   Now Playing artist-name button (opens the navigation chooser / artist)
+   ============================================================ */
+.now-playing__artist-btn {
+  display: block;
+  width: 100%;
+  margin-top: 5px;
+  font-size: 15px;
+  text-align: left;
+  color: var(--text-muted);
+}
+
+/* ============================================================
+   Artist navigation sheet ("View Artist" / "View Album")
+   ============================================================ */
+.nav-sheet__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 64;
+  background: rgba(0, 0, 0, 0);
+  transition: background-color var(--duration-base) var(--ease-standard);
+}
+.nav-sheet__scrim.is-open {
+  background: rgba(0, 0, 0, 0.5);
+}
+.nav-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 65;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  padding: var(--space-4) var(--space-4)
+    calc(var(--safe-bottom) + var(--space-4));
+  transform: translateY(100%);
+  transition: transform var(--duration-base) var(--ease-standard);
+}
+.nav-sheet.is-open {
+  transform: translateY(0);
+}
+.nav-sheet__title {
+  padding-bottom: 6px;
+  font-size: 13px;
+  text-align: center;
+  color: var(--text-faint);
+}
+.nav-sheet__option {
+  min-height: var(--thumb-lg);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 500;
+}
+.nav-sheet__cancel {
+  margin-top: 4px;
+  min-height: var(--thumb-lg);
+  color: var(--text-muted);
+  font-size: 15px;
+}
