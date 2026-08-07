@@ -1,31 +1,16 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { Search, FolderCog, X } from "lucide-react";
 import { SongList } from "../components/library/SongList.jsx";
 import { useLibrary } from "../state/LibraryContext.jsx";
-import { search } from "../search/searchIndex.js";
+import { useDebouncedSearch } from "../state/useDebouncedSearch.js";
 import { getByAlbumId } from "../db/songsRepo.js";
 
 export function LibraryView({ onOpenFolders }) {
   const { version, songCount, folders, addFolder, supported } = useLibrary();
   const [query, setQuery] = useState("");
-  const [matches, setMatches] = useState({ songs: [], albums: [] });
+  const matches = useDebouncedSearch(query, version);
   const [albumFilter, setAlbumFilter] = useState(null); // { id, name } | null
   const [albumSongs, setAlbumSongs] = useState(null);
-  const debounceRef = useRef(null);
-
-  useEffect(() => {
-    clearTimeout(debounceRef.current);
-    if (!query.trim()) {
-      setMatches({ songs: [], albums: [] });
-      return;
-    }
-    debounceRef.current = setTimeout(() => {
-      search(query, version).then((r) =>
-        setMatches({ songs: r.songs, albums: r.albums }),
-      );
-    }, 120);
-    return () => clearTimeout(debounceRef.current);
-  }, [query, version]);
 
   const selectAlbum = useCallback((album) => {
     setAlbumFilter(album);

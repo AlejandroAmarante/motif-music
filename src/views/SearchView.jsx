@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { Search } from "lucide-react";
-import { search } from "../search/searchIndex.js";
+import { useDebouncedSearch } from "../state/useDebouncedSearch.js";
 import { useLibrary } from "../state/LibraryContext.jsx";
 import { usePlayer } from "../state/PlayerContext.jsx";
 import { Artwork } from "../components/common/Artwork.jsx";
@@ -27,25 +27,8 @@ export function SearchView() {
   const { version } = useLibrary();
   const { playSongs } = usePlayer();
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState({
-    songs: [],
-    artists: [],
-    albums: [],
-  });
+  const results = useDebouncedSearch(query, version);
   const [recents, setRecents] = useState(loadRecents);
-  const debounceRef = useRef(null);
-
-  useEffect(() => {
-    clearTimeout(debounceRef.current);
-    if (!query.trim()) {
-      setResults({ songs: [], artists: [], albums: [] });
-      return;
-    }
-    debounceRef.current = setTimeout(() => {
-      search(query, version).then(setResults);
-    }, 120);
-    return () => clearTimeout(debounceRef.current);
-  }, [query, version]);
 
   const commitRecent = useCallback((term) => {
     if (!term.trim()) return;

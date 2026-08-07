@@ -1,6 +1,7 @@
 import { ChevronDown, FolderCog, Clock, AlertTriangle } from "lucide-react";
 import { FolderPicker } from "../components/library/FolderPicker.jsx";
 import { Toggle } from "../components/common/Toggle.jsx";
+import { SectionTitle } from "../components/common/SectionTitle.jsx";
 import { useMountTransition } from "../utils/useMountTransition.js";
 import { useLibrary } from "../state/LibraryContext.jsx";
 
@@ -11,17 +12,6 @@ const SCAN_OPTIONS = [
   { value: "interval-60", label: "Every hour" },
   { value: "watch", label: "Watch for changes (experimental)" },
 ];
-
-function SectionTitle({ icon: Icon, children }) {
-  return (
-    <h2 className="home-rail__title">
-      <span className="home-rail__icon" aria-hidden="true">
-        <Icon size={20} strokeWidth={1.8} />
-      </span>
-      {children}
-    </h2>
-  );
-}
 
 export function ConnectedFoldersView({ isOpen, onClose }) {
   const {

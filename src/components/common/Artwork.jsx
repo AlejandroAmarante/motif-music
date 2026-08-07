@@ -1,6 +1,10 @@
-import { useEffect, useState } from 'react';
-import { useArtworkUrl } from '../../utils/useArtworkUrl.js';
-import { resolveAlbumArtwork, albumArtworkContext } from '../../artwork/artworkManager.js';
+import { useEffect, useState } from "react";
+import { useArtworkUrl } from "../../utils/useArtworkUrl.js";
+import {
+  resolveAlbumArtwork,
+  albumArtworkContext,
+} from "../../artwork/artworkManager.js";
+import { PulseMark } from "./PulseMark.jsx";
 
 /**
  * The fallback glyph and the loaded image are both always mounted, stacked,
@@ -9,7 +13,13 @@ import { resolveAlbumArtwork, albumArtworkContext } from '../../artwork/artworkM
  * turns any transient `url` instability into a visible flash; crossfading
  * makes the same instability invisible or at worst a soft dissolve.
  */
-export function Artwork({ artworkId, song, alt, className = '', playing = false }) {
+export function Artwork({
+  artworkId,
+  song,
+  alt,
+  className = "",
+  playing = false,
+}) {
   const knownId = artworkId ?? song?.artworkId ?? null;
   const [resolved, setResolved] = useState(null); // { artworkId } | { artworkUrl } | null
 
@@ -39,16 +49,18 @@ export function Artwork({ artworkId, song, alt, className = '', playing = false 
   return (
     <div className={`artwork-wrap ${className}`}>
       <div className="artwork artwork--fallback" role="img" aria-label={alt}>
-        <span className={`motif-mark ${playing ? 'pulse' : 'static'}`} aria-hidden="true">
-          <span /><span /><span /><span />
-        </span>
+        <PulseMark active={playing} />
       </div>
       {/* `undefined`, not `''` — an empty string src still counts as a URL
           to the browser and triggers a request for the current document,
           which is the exact warning this avoids. Omitting the attribute
           entirely (via undefined) keeps the element mounted for the
           crossfade without ever pointing it at a real-but-wrong URL. */}
-      <img src={url || undefined} alt={alt} className={`artwork artwork--loaded${url ? ' is-visible' : ''}`} />
+      <img
+        src={url || undefined}
+        alt={alt}
+        className={`artwork artwork--loaded${url ? " is-visible" : ""}`}
+      />
     </div>
   );
 }

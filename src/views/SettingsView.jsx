@@ -17,17 +17,7 @@ import { ensurePermission } from "../db/directoryHandlesRepo.js";
 import { importSampleTrack } from "../setup/sampleTrackImport.js";
 import { pushToast } from "../state/toastBus.js";
 import { Toggle } from "../components/common/Toggle.jsx";
-
-function SectionTitle({ icon: Icon, children }) {
-  return (
-    <h2 className="home-rail__title">
-      <span className="home-rail__icon" aria-hidden="true">
-        <Icon size={20} strokeWidth={1.8} />
-      </span>
-      {children}
-    </h2>
-  );
-}
+import { SectionTitle } from "../components/common/SectionTitle.jsx";
 
 function useStorageEstimate() {
   const [estimate, setEstimate] = useState(null);
@@ -52,13 +42,8 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
   const [discogsToken, setDiscogsToken] = useState("");
   const [resettingSetup, setResettingSetup] = useState(false);
   const [addingSample, setAddingSample] = useState(false);
-  const {
-    supported,
-    motifFolderExists,
-    createMotifFolder,
-    folders,
-    rescan,
-  } = useLibrary();
+  const { supported, motifFolderExists, createMotifFolder, folders, rescan } =
+    useLibrary();
   const {
     needRefresh,
     checking,

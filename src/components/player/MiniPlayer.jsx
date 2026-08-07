@@ -3,6 +3,7 @@ import { Play, Pause } from "lucide-react";
 import { usePlayer } from "../../state/PlayerContext.jsx";
 import { useSmoothProgress } from "../../utils/useSmoothProgress.js";
 import { Artwork } from "../common/Artwork.jsx";
+import { PulseMark } from "../common/PulseMark.jsx";
 
 export function MiniPlayer() {
   const {
@@ -67,12 +68,7 @@ export function MiniPlayer() {
         }}
       >
         {buffering ? (
-          <span className="motif-mark pulse" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-            <span />
-          </span>
+          <PulseMark />
         ) : isPlaying ? (
           <Pause size={26} fill="currentColor" />
         ) : (

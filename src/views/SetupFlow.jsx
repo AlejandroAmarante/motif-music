@@ -13,6 +13,7 @@ import {
 import { ensurePermission } from "../db/directoryHandlesRepo.js";
 import { importSampleTrack } from "../setup/sampleTrackImport.js";
 import { markSetupComplete } from "../setup/setupState.js";
+import { PulseMark } from "../components/common/PulseMark.jsx";
 
 function StepShell({ children }) {
   return (
@@ -21,15 +22,6 @@ function StepShell({ children }) {
     </div>
   );
 }
-
-const Mark = () => (
-  <span className="motif-mark pulse" aria-hidden="true">
-    <span />
-    <span />
-    <span />
-    <span />
-  </span>
-);
 
 export function SetupFlow({ onComplete }) {
   const [step, setStep] = useState("welcome");
@@ -163,7 +155,7 @@ export function SetupFlow({ onComplete }) {
   if (step === "welcome") {
     return (
       <StepShell>
-        <Mark />
+        <PulseMark />
         <h1 className="setup-flow__title">Welcome to Motif</h1>
         <p className="setup-flow__body">
           Your library, not a subscription. Motif plays music straight from your
@@ -251,7 +243,8 @@ export function SetupFlow({ onComplete }) {
               onClick={handleContinueWithExisting}
               disabled={busy}
             >
-              Continue with {connectedFolders.length === 1 ? "this folder" : "these folders"}
+              Continue with{" "}
+              {connectedFolders.length === 1 ? "this folder" : "these folders"}
             </button>
             <p className="setup-flow__body" style={{ marginTop: 4 }}>
               Or connect another folder:
@@ -260,7 +253,8 @@ export function SetupFlow({ onComplete }) {
         ) : (
           <>
             <p className="setup-flow__body">
-              Choose an existing folder of music, or let Motif create one for you.
+              Choose an existing folder of music, or let Motif create one for
+              you.
             </p>
             {error && <p className="setup-flow__error">{error}</p>}
           </>
@@ -276,7 +270,8 @@ export function SetupFlow({ onComplete }) {
               Use Existing Folder
             </span>
             <span className="setup-flow__option-desc">
-              Point Motif at {hasConnected ? "another" : "a"} folder of music you already have.
+              Point Motif at {hasConnected ? "another" : "a"} folder of music
+              you already have.
             </span>
           </button>
           {!motifFolderTaken && (
@@ -296,7 +291,7 @@ export function SetupFlow({ onComplete }) {
         </div>
         {busy && (
           <p className="setup-flow__status">
-            <Mark /> Setting things up…
+            <PulseMark /> Setting things up…
           </p>
         )}
         <button className="setup-flow__secondary" onClick={handleSkip}>

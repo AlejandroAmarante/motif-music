@@ -1,5 +1,6 @@
 import { Plus } from "lucide-react";
 import { useLibrary } from "../../state/LibraryContext.jsx";
+import { PulseMark } from "../common/PulseMark.jsx";
 
 export function FolderPicker() {
   const {
@@ -65,12 +66,7 @@ export function FolderPicker() {
 
       {scanning && (
         <div className="folder-picker__progress">
-          <span className="motif-mark pulse" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-            <span />
-          </span>
+          <PulseMark />
           <span>
             {scanProgress?.folder
               ? `Scanning ${scanProgress.folder} — ${scanProgress.scanned ?? 0} files`

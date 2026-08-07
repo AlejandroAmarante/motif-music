@@ -8,6 +8,7 @@ import {
   getTopPlayed,
 } from "../db/songsRepo.js";
 import { Artwork } from "../components/common/Artwork.jsx";
+import { PulseMark } from "../components/common/PulseMark.jsx";
 
 function Rail({ title, icon: Icon, songs, onPlay }) {
   if (!songs.length) return null;
@@ -68,12 +69,7 @@ export function HomeView({ onOpenSettings }) {
       <div className="view__scroll scroll-region">
         {songCount === 0 ? (
           <div className="home-empty">
-            <span className="motif-mark pulse" aria-hidden="true">
-              <span />
-              <span />
-              <span />
-              <span />
-            </span>
+            <PulseMark />
             <h2>Your library is empty</h2>
             <p>
               Connect a folder of music from your device to get started. Motif
