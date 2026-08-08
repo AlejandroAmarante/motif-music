@@ -1,4 +1,4 @@
-// src/db/songsRepo.js — added getByArtistId / countByArtistId, everything else unchanged
+// src/db/songsRepo.js — full updated file
 import { getDb } from "./db.js";
 import { makeId, normalize } from "../utils/id.js";
 import { getOrCreateArtist, adjustArtistSongCount } from "./artistsRepo.js";
@@ -22,7 +22,75 @@ export async function countSongs() {
   return db.count("songs");
 }
 
-export async function upsertFromScan({
+/**
+ * Phase 1 of a two-phase scan (see src/library/scanner.js): inserts a
+ * minimal, immediately-visible row for a brand-new file before any
+ * tag/duration/artwork parsing has happened. `pending: 1` is what SongRow
+ * reads to show the "still loading" treatment and disable playback until
+ * enrichSong() below fills in the real data. Deliberately does NOT create
+ * Artist/Album records yet — we don't know them from a filename alone —
+ * so that resolution, and the song-count bookkeeping that goes with it,
+ * happens once, in enrichSong().
+ */
+export async function seedPlaceholder({
+  path,
+  dirHandleId,
+  fileName,
+  format,
+  size,
+  lastModified,
+}) {
+  const db = await getDb();
+  const title = fileName.replace(/\.[^./]+$/, "");
+  const song = {
+    id: makeId("song"),
+    path,
+    dirHandleId,
+    fileName,
+    format,
+    size,
+    lastModified,
+    title,
+    titleLower: normalize(title),
+    artist: null,
+    artistId: null,
+    album: null,
+    albumId: null,
+    albumArtist: null,
+    trackNumber: null,
+    discNumber: null,
+    genre: [],
+    genreIds: [],
+    year: null,
+    duration: 0,
+    bitrate: null,
+    sampleRate: null,
+    artworkId: null,
+    dateAdded: Date.now(),
+    lastPlayedAt: null,
+    playCount: 0,
+    skipCount: 0,
+    favorite: 0,
+    rating: 0,
+    lyrics: null,
+    lyricsCheckedAt: null,
+    metadataSchemaVersion: METADATA_SCHEMA_VERSION,
+    pending: 1,
+  };
+  await db.put("songs", song);
+  return song;
+}
+
+/**
+ * Phase 2: fills in the real tag/duration/artwork data for a file — either
+ * a placeholder seeded by seedPlaceholder() above, or an existing song
+ * being refreshed after an on-disk change. Both cases look up the current
+ * record by path (a placeholder's generated id isn't known to the caller)
+ * and replace it in place, so the row's id — and therefore anything
+ * already rendering/subscribed to it — stays stable across the pending →
+ * ready transition.
+ */
+export async function enrichSong({
   path,
   dirHandleId,
   fileName,
@@ -32,13 +100,7 @@ export async function upsertFromScan({
   tags,
 }) {
   const existing = await getByPath(path);
-  if (
-    existing &&
-    existing.size === size &&
-    existing.lastModified === lastModified
-  ) {
-    return { status: "unchanged", song: existing };
-  }
+  const wasPending = Boolean(existing?.pending);
 
   const albumArtistName = tags.albumArtist || tags.artist || "Unknown Artist";
   const albumArtistRec = await getOrCreateArtist(albumArtistName);
@@ -100,16 +162,22 @@ export async function upsertFromScan({
     lyrics: tags.lyrics ?? null, // { synced: [{time,text}]|null, text: string|null } | null
     lyricsCheckedAt: existing?.lyricsCheckedAt ?? null, // ms epoch — last time we asked LRCLIB, used to throttle retries on a confirmed-missing result
     metadataSchemaVersion: METADATA_SCHEMA_VERSION,
+    pending: 0,
   };
 
   await db.put("songs", song);
 
-  if (!existing) {
+  // Count bookkeeping happens exactly once per song, at whichever pass
+  // first gives it a real artist/album — for a placeholder that's here,
+  // not seedPlaceholder(); for a plain new file with no placeholder stage
+  // (or a re-enrich of an already-complete song) it's the same rule
+  // upsertFromScan used to follow: only on that song's first resolution.
+  if (!existing || wasPending) {
     await adjustArtistSongCount(trackArtistRec.id, 1);
     if (album) await adjustAlbumSongCount(album.id, 1);
   }
 
-  return { status: existing ? "updated" : "created", song };
+  return song;
 }
 
 /** Removes a song that scanning discovered is no longer on disk. */
@@ -129,8 +197,12 @@ export async function removeById(id) {
 async function _removeSongRecord(song) {
   const db = await getDb();
   await db.delete("songs", song.id);
-  await adjustArtistSongCount(song.artistId, -1);
-  if (song.albumId) await adjustAlbumSongCount(song.albumId, -1);
+  // A placeholder never got its artist/album counted (see enrichSong), so
+  // don't decrement for one that's removed before enrichment ever runs.
+  if (!song.pending) {
+    await adjustArtistSongCount(song.artistId, -1);
+    if (song.albumId) await adjustAlbumSongCount(song.albumId, -1);
+  }
   return song;
 }
 
@@ -172,6 +244,12 @@ export async function getPathsForDir(dirHandleId) {
   return songs.map((s) => s.path);
 }
 
+/** Every song still flagged pending, across all folders — used to resume an interrupted scan on app load. See src/library/scanner.js's resumePendingEnrichment(). */
+export async function getPendingSongs() {
+  const db = await getDb();
+  return db.getAllFromIndex("songs", "byPending", IDBKeyRange.only(1));
+}
+
 export async function getSortedIds(indexName = "byTitleLower") {
   const db = await getDb();
   return db.getAllKeysFromIndex("songs", indexName);
@@ -206,6 +284,14 @@ export async function countByArtistId(artistId) {
   return db.countFromIndex("songs", "byArtistId", artistId);
 }
 
+/**
+ * Lite rows for the fuzzy search index. Pending songs are left out — a
+ * bare filename with no artist/album isn't a useful search match yet, and
+ * excluding them here means search/filter results never surface a track
+ * that SongRow would just show disabled anyway. They join the index
+ * automatically once enrichSong() clears the flag and the index next
+ * rebuilds.
+ */
 export async function getAllLite() {
   const db = await getDb();
   const tx = db.transaction("songs", "readonly");
@@ -213,13 +299,15 @@ export async function getAllLite() {
   let cursor = await tx.store.openCursor();
   while (cursor) {
     const s = cursor.value;
-    out.push({
-      id: s.id,
-      title: s.title,
-      titleLower: s.titleLower,
-      artist: s.artist,
-      album: s.album,
-    });
+    if (!s.pending) {
+      out.push({
+        id: s.id,
+        title: s.title,
+        titleLower: s.titleLower,
+        artist: s.artist,
+        album: s.album,
+      });
+    }
     cursor = await cursor.continue();
   }
   await tx.done;

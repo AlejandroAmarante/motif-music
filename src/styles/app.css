@@ -422,6 +422,22 @@
   justify-content: center;
   color: var(--danger);
 }
+.song-row.is-pending {
+  opacity: 0.55;
+  cursor: default;
+}
+.song-row.is-pending:active {
+  background: none;
+}
+.song-row__pending {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  color: var(--text-faint);
+}
 .song-row--placeholder {
   display: flex;
   align-items: center;

@@ -1,6 +1,19 @@
+// src/components/library/FolderPicker.jsx — full updated file (phase-aware progress text)
 import { Plus } from "lucide-react";
 import { useLibrary } from "../../state/LibraryContext.jsx";
 import { PulseMark } from "../common/PulseMark.jsx";
+
+function scanProgressText(scanProgress) {
+  if (!scanProgress?.folder) return "Scanning…";
+  const { folder, phase, scanned, enrichedCount, enrichedTotal } = scanProgress;
+  if (phase === "enriching") {
+    return `Reading tags in ${folder} — ${enrichedCount ?? 0} of ${enrichedTotal ?? 0}`;
+  }
+  // "discovering" (or an older/missing phase) — files are already
+  // appearing in Library as they're found, so this is just letting
+  // someone know the walk itself is still going.
+  return `Finding files in ${folder} — ${scanned ?? 0} found`;
+}
 
 export function FolderPicker() {
   const {
@@ -67,11 +80,7 @@ export function FolderPicker() {
       {scanning && (
         <div className="folder-picker__progress">
           <PulseMark />
-          <span>
-            {scanProgress?.folder
-              ? `Scanning ${scanProgress.folder} — ${scanProgress.scanned ?? 0} files`
-              : "Scanning…"}
-          </span>
+          <span>{scanProgressText(scanProgress)}</span>
         </div>
       )}
 

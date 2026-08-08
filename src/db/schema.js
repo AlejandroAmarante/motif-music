@@ -1,4 +1,4 @@
-// src/db/schema.js — DB_VERSION bumped 2 → 3
+// src/db/schema.js — DB_VERSION bumped 3 → 4
 // Motif database schema.
 //
 // This is a *concrete* IndexedDB layer, not an abstracted "storage driver"
@@ -8,7 +8,7 @@
 // never mutate a released version's store definitions in place.
 
 export const DB_NAME = "motif";
-export const DB_VERSION = 3;
+export const DB_VERSION = 4;
 
 // versioned metadata schema tag stored per-song, independent of DB_VERSION —
 // this is what lets the metadata *shape* evolve (new extracted fields) without
@@ -18,8 +18,10 @@ export const METADATA_SCHEMA_VERSION = 1;
 /**
  * @param {import('idb').IDBPDatabase} db
  * @param {number} oldVersion
+ * @param {number | null} newVersion
+ * @param {import('idb').IDBPTransaction} transaction
  */
-export function upgrade(db, oldVersion) {
+export function upgrade(db, oldVersion, newVersion, transaction) {
   if (oldVersion < 1) {
     // --- Library core ---
     const songs = db.createObjectStore("songs", { keyPath: "id" });
@@ -102,5 +104,21 @@ export function upgrade(db, oldVersion) {
     // (release date, country, status) resolved from MusicBrainz — or a
     // cached failure with a retry cooldown.
     db.createObjectStore("albumMeta", { keyPath: "key" });
+  }
+
+  if (oldVersion < 4) {
+    // --- Two-phase scanning (see src/library/scanner.js) ---
+    // A newly-discovered file gets a lightweight placeholder row the
+    // instant it's found, flagged `pending: 1`, so it's visible (see
+    // SongRow's pending treatment) before its tags/duration/artwork have
+    // actually been read. This index isn't on the render hot path — a
+    // rendered row already has the flag on the record it was handed — it
+    // exists so a scan interrupted mid-enrichment (tab closed, etc.) can
+    // find and finish whatever's still unfinished on next load, instead
+    // of leaving songs stuck pending forever. Added to the existing
+    // `songs` store via the upgrade transaction rather than
+    // db.createObjectStore, since the store itself already exists.
+    const songs = transaction.objectStore("songs");
+    songs.createIndex("byPending", "pending");
   }
 }

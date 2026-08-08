@@ -1,3 +1,4 @@
+// src/state/LibraryContext.jsx — full updated file (resumes interrupted enrichment on load)
 import {
   createContext,
   useContext,
@@ -16,6 +17,7 @@ import {
   scanAllFolders,
   DuplicateFolderError,
 } from "../library/libraryManager.js";
+import { resumePendingEnrichment } from "../library/scanner.js";
 import { countSongs } from "../db/songsRepo.js";
 import { getSetting, setSetting } from "../db/settingsRepo.js";
 import { watchFolders, isWatchSupported } from "../library/watchFolders.js";
@@ -39,6 +41,7 @@ export function LibraryProvider({ children }) {
   const [autoRemoveMissing, setAutoRemoveMissingState] = useState(false);
   const [motifFolderExists, setMotifFolderExists] = useState(false);
   const didStartupScan = useRef(false);
+  const didResumePending = useRef(false);
 
   const refreshFolders = useCallback(async () => {
     setFolders(await listLibraryFolders());
@@ -71,6 +74,24 @@ export function LibraryProvider({ children }) {
       }),
     [refreshCount],
   );
+
+  // Finishes enrichment for any songs left flagged "pending" from a scan
+  // that didn't get to complete last session (tab closed, permission
+  // revoked mid-scan). Runs once, unconditionally — independent of
+  // scanMode, since a manual-only rescan setting shouldn't be able to
+  // leave a placeholder stuck showing "still loading" forever. A no-op
+  // (single fast indexed query) when there's nothing left pending.
+  useEffect(() => {
+    if (didResumePending.current) return;
+    didResumePending.current = true;
+    resumePendingEnrichment().then((result) => {
+      if ((result.created || 0) + (result.updated || 0) > 0) {
+        refreshCount();
+        setVersion((v) => v + 1);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const scan = useCallback(async () => {
     setScanning(true);
