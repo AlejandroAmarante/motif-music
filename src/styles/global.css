@@ -26,9 +26,9 @@
   --success: #4cae6b;
 
   /* Type */
-  --font-display: 'Newsreader', 'Iowan Old Style', Georgia, serif;
-  --font-body: 'Inter', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --font-display: "Newsreader", "Iowan Old Style", Georgia, serif;
+  --font-body: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
   /* Spacing scale — reference these instead of ad hoc px values */
   --space-1: 4px;
@@ -127,7 +127,10 @@ body {
   overflow: hidden;
 }
 
-h1, h2, h3, h4 {
+h1,
+h2,
+h3,
+h4 {
   font-family: var(--font-display);
   font-weight: 600;
   margin: 0;
@@ -194,27 +197,183 @@ img {
   background: var(--accent);
   display: block;
 }
-.motif-mark.static span:nth-child(1) { height: 40%; }
-.motif-mark.static span:nth-child(2) { height: 100%; }
-.motif-mark.static span:nth-child(3) { height: 65%; }
-.motif-mark.static span:nth-child(4) { height: 80%; }
+.motif-mark.static span:nth-child(1) {
+  height: 40%;
+}
+.motif-mark.static span:nth-child(2) {
+  height: 100%;
+}
+.motif-mark.static span:nth-child(3) {
+  height: 65%;
+}
+.motif-mark.static span:nth-child(4) {
+  height: 80%;
+}
 
 .motif-mark.pulse span {
   animation: motif-pulse 1.1s ease-in-out infinite;
 }
-.motif-mark.pulse span:nth-child(1) { animation-delay: -0.9s; }
-.motif-mark.pulse span:nth-child(2) { animation-delay: -0.6s; }
-.motif-mark.pulse span:nth-child(3) { animation-delay: -0.3s; }
-.motif-mark.pulse span:nth-child(4) { animation-delay: 0s; }
+.motif-mark.pulse span:nth-child(1) {
+  animation-delay: -0.9s;
+}
+.motif-mark.pulse span:nth-child(2) {
+  animation-delay: -0.6s;
+}
+.motif-mark.pulse span:nth-child(3) {
+  animation-delay: -0.3s;
+}
+.motif-mark.pulse span:nth-child(4) {
+  animation-delay: 0s;
+}
+
+.marquee {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  position: relative;
+}
+
+/*
+ * Used ONLY to determine whether the original text actually
+ * exceeds the available width.
+ */
+.marquee__measure {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+  width: max-content;
+  max-width: none;
+  white-space: nowrap;
+}
+
+/*
+ * Actual scrolling content.
+ */
+.marquee__track {
+  display: inline-flex;
+  width: max-content;
+  will-change: transform;
+  position: relative;
+  z-index: 1;
+}
+
+.marquee__content {
+  flex: 0 0 auto;
+}
+
+.marquee__gap {
+  flex: 0 0 auto;
+  width: var(--marquee-gap, 4.5rem);
+}
+
+.marquee__track.is-running {
+  animation: marquee var(--marquee-duration, 12s) linear infinite;
+}
+
+/*
+ * Left fade.
+ *
+ * Uses a mask instead of a background color, so it naturally
+ * fades whatever is underneath the text instead of requiring
+ * a hard-coded background color.
+ */
+.marquee__left-fade {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 18px;
+  pointer-events: none;
+  z-index: 3;
+
+  background: linear-gradient(
+    to right,
+    var(--marquee-fade-bg),
+    transparent
+  );
+
+  animation: marquee-left-fade var(--marquee-duration, 12s) linear infinite;
+}
+
+.marquee__right-fade {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 18px;
+  pointer-events: none;
+  z-index: 3;
+
+  background: linear-gradient(
+    to left,
+    var(--marquee-fade-bg),
+    transparent
+  );
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(
+      calc(-50% - (var(--marquee-gap, 4.5rem) / 2))
+    );
+  }
+}
+
+@keyframes marquee-left-fade {
+  0% {
+    opacity: 0;
+  }
+
+  4% {
+    opacity: 1;
+  }
+
+  90% {
+    opacity: 1;
+  }
+
+  95%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee__track.is-running {
+    animation: none;
+  }
+
+  .marquee__left-fade {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee__track.is-running {
+    animation: none;
+  }
+
+  .marquee__left-fade {
+    display: none;
+  }
+}
 
 @keyframes motif-pulse {
-  0%, 100% { height: 30%; }
-  50% { height: 100%; }
+  0%,
+  100% {
+    height: 30%;
+  }
+  50% {
+    height: 100%;
+  }
 }
 
 @media (hover: hover) and (pointer: fine) {
   button:not(:disabled) {
-    transition: opacity var(--duration-fast) var(--ease-sharp), background-color var(--duration-fast) var(--ease-sharp);
+    transition:
+      opacity var(--duration-fast) var(--ease-sharp),
+      background-color var(--duration-fast) var(--ease-sharp);
   }
   button:not(:disabled):hover {
     opacity: 0.78;

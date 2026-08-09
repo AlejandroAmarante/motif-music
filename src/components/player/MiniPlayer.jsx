@@ -1,9 +1,11 @@
+// src/components/player/MiniPlayer.jsx
 import { useSwipeable } from "react-swipeable";
 import { Play, Pause } from "lucide-react";
 import { usePlayer } from "../../state/PlayerContext.jsx";
 import { useSmoothProgress } from "../../utils/useSmoothProgress.js";
 import { Artwork } from "../common/Artwork.jsx";
 import { PulseMark } from "../common/PulseMark.jsx";
+import MarqueeText from "../common/MarqueeText.jsx";
 
 export function MiniPlayer() {
   const {
@@ -47,16 +49,24 @@ export function MiniPlayer() {
         className="mini-player__progress"
         style={{ transform: `scaleX(${progress})` }}
       />
+
       <Artwork
         song={current}
         alt=""
         className="mini-player__art"
         playing={isPlaying}
       />
+
       <div className="mini-player__text">
-        <p className="mini-player__title">{current.title}</p>
-        <p className="mini-player__artist">{current.artist}</p>
+        <MarqueeText className="mini-player__title" speed={12} delay={1.2}>
+          {current.title}
+        </MarqueeText>
+
+        <MarqueeText className="mini-player__artist" speed={14} delay={1.4}>
+          {current.artist}
+        </MarqueeText>
       </div>
+
       <button
         className="mini-player__play"
         aria-label={isPlaying ? "Pause" : "Play"}

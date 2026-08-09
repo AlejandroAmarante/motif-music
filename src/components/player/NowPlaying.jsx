@@ -12,6 +12,7 @@ import {
   Repeat,
   Repeat1,
 } from "lucide-react";
+
 import { usePlayer } from "../../state/PlayerContext.jsx";
 import { useNavigation } from "../../state/NavigationContext.jsx";
 import { resolveArtistNavigation } from "../../library/navigation.js";
@@ -22,6 +23,7 @@ import { LyricsView } from "./LyricsView.jsx";
 import { SeekBar } from "./SeekBar.jsx";
 import { ArtistNavigationSheet } from "./ArtistNavigationSheet.jsx";
 import { formatDuration } from "../../utils/formatTime.js";
+import MarqueeText from "../common/MarqueeText.jsx";
 
 const isolateDrag = {
   onTouchStart: (e) => e.stopPropagation(),
@@ -51,25 +53,21 @@ export function NowPlaying() {
     nowPlayingOpen,
     closeNowPlaying,
   } = usePlayer();
+
   const { openArtist, openAlbum } = useNavigation();
 
   const [dragValue, setDragValue] = useState(null);
   const [lyricsOpen, setLyricsOpen] = useState(false);
+
   // { artistId, albumId } while the "View Artist / View Album" chooser is
-  // showing; null otherwise. See resolveArtistNavigation() for when this
-  // is used versus navigating straight to the artist.
+  // showing; null otherwise.
   const [artistNavChoice, setArtistNavChoice] = useState(null);
+
   const draggingRef = useRef(false);
-  // While seeking, a fast horizontal drag — or the release motion itself —
-  // can otherwise be misread by the swipe library as a left/right/down
-  // gesture, firing next()/previous()/close() mid-scrub. That's also what
-  // was racing endScrub's play() call against a fresh track load, which
-  // surfaced as "play() request was interrupted" console noise. This flag
-  // stays true from the first drag tick through release, and is only
-  // cleared once a genuinely new touch/pointer sequence starts (see
-  // onTouchStartCapture/onPointerDownCapture below) — not by the release
-  // that ends the seek itself.
+
+  // Prevent seek gestures from being interpreted as swipe navigation.
   const seekingRef = useRef(false);
+
   const { shouldRender, entered } = useMountTransition(nowPlayingOpen, 320);
   const smoothTime = useSmoothProgress(currentTime, isPlaying, playbackRate);
 
@@ -77,6 +75,7 @@ export function NowPlaying() {
     if (dragValue !== null && !draggingRef.current) {
       setDragValue(null);
     }
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTime]);
 
@@ -101,8 +100,11 @@ export function NowPlaying() {
 
   const handleArtistTap = async () => {
     if (!current) return;
+
     const result = await resolveArtistNavigation(current);
+
     if (!result) return;
+
     if (result.type === "choice") {
       setArtistNavChoice(result);
     } else {
@@ -116,15 +118,15 @@ export function NowPlaying() {
   const displayedTime = dragValue ?? smoothTime;
   const lyricsUnavailable = current.lyrics === false;
 
-  // The very first onChange tick of a drag marks the start of scrubbing
-  // (pauses playback so audio doesn't stutter while dragging); onCommit
-  // fires once, on release, and is the only point that actually seeks.
+  // The first onChange tick starts scrubbing and pauses playback.
+  // onCommit is the only point that actually seeks.
   const handleSeekChange = (v) => {
     if (!draggingRef.current) {
       draggingRef.current = true;
       seekingRef.current = true;
       beginScrub();
     }
+
     setDragValue(v);
   };
 
@@ -132,16 +134,9 @@ export function NowPlaying() {
     draggingRef.current = false;
     setDragValue(v);
     endScrub(v);
-    // seekingRef deliberately stays true here — see the comment on its
-    // declaration above.
   };
 
-  // Safety net for a drag that never gets a proper release event — pointer
-  // capture lost to a system dialog, the tab losing focus mid-drag, etc.
-  // Without this, draggingRef would stay stuck true and playback would
-  // stay paused indefinitely since endScrub would never run. Committing
-  // with whatever the last known drag position was keeps this behaving
-  // exactly like a normal release.
+  // Safety net if pointer capture/release is lost.
   const handleSeekBlur = () => {
     if (draggingRef.current) {
       handleSeekCommit(dragValue ?? smoothTime);
@@ -186,9 +181,19 @@ export function NowPlaying() {
       </div>
 
       <div className="now-playing__meta">
-        <h2 className="now-playing__title">{current.title}</h2>
-        <button className="now-playing__artist-btn" onClick={handleArtistTap}>
-          {current.artist}
+        <MarqueeText className="now-playing__title" speed={12} delay={1.2}>
+          {current.title}
+        </MarqueeText>
+
+        <button
+          className="now-playing__artist-btn"
+          onClick={handleArtistTap}
+          aria-label={current.artist}
+          title={current.artist}
+        >
+          <MarqueeText className="now-playing__artist" speed={14} delay={1.4}>
+            {current.artist}
+          </MarqueeText>
         </button>
       </div>
 
@@ -203,6 +208,7 @@ export function NowPlaying() {
           onChange={handleSeekChange}
           onCommit={handleSeekCommit}
         />
+
         <div className="now-playing__times mono">
           <span>{formatDuration(displayedTime)}</span>
           <span>{formatDuration(duration)}</span>
@@ -248,7 +254,9 @@ export function NowPlaying() {
         </button>
 
         <button
-          className={`now-playing__ghost-btn${repeatMode !== "off" ? " is-active" : ""}`}
+          className={`now-playing__ghost-btn${
+            repeatMode !== "off" ? " is-active" : ""
+          }`}
           onClick={cycleRepeat}
           aria-label={`Repeat: ${repeatMode}`}
         >
@@ -290,12 +298,14 @@ export function NowPlaying() {
         onClose={() => setArtistNavChoice(null)}
         onViewArtist={() => {
           const { artistId } = artistNavChoice;
+
           setArtistNavChoice(null);
           closeNowPlaying();
           openArtist(artistId);
         }}
         onViewAlbum={() => {
           const { albumId } = artistNavChoice;
+
           setArtistNavChoice(null);
           closeNowPlaying();
           openAlbum(albumId);

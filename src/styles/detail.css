@@ -89,8 +89,7 @@
    ============================================================ */
 .artist-view__hero {
   position: relative;
-  height: 42vh;
-  min-height: 260px;
+  min-height: 200px;
   display: flex;
   align-items: flex-end;
   padding: 0 20px 20px;
@@ -132,19 +131,26 @@
 }
 .artist-view__albums-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-4);
   padding: 0 20px var(--space-6);
+  align-items: start;
 }
+
 .artist-view__album-card {
   display: flex;
   flex-direction: column;
   gap: 8px;
   text-align: left;
+  min-width: 0;
+  overflow: hidden;
 }
+
 .artist-view__album-art {
   width: 100%;
-  aspect-ratio: 1;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  display: block;
 }
 .artist-view__album-art .motif-mark {
   height: 30%;
