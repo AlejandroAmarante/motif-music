@@ -1,10 +1,8 @@
-// src/db/songsRepo.js — full updated file
+// src/db/songsRepo.js — full updated file (enrichSong removed, now dead after the batch rewrite; unused imports cleaned up)
 import { getDb } from "./db.js";
 import { makeId, normalize } from "../utils/id.js";
-import { getOrCreateArtist, adjustArtistSongCount } from "./artistsRepo.js";
-import { getOrCreateAlbum, adjustAlbumSongCount } from "./albumsRepo.js";
-import { getOrCreateGenres } from "./genresRepo.js";
-import { storeArtwork } from "./artworkRepo.js";
+import { adjustArtistSongCount } from "./artistsRepo.js";
+import { adjustAlbumSongCount } from "./albumsRepo.js";
 import { METADATA_SCHEMA_VERSION } from "./schema.js";
 
 export async function getByPath(path) {
@@ -27,10 +25,11 @@ export async function countSongs() {
  * minimal, immediately-visible row for a brand-new file before any
  * tag/duration/artwork parsing has happened. `pending: 1` is what SongRow
  * reads to show the "still loading" treatment and disable playback until
- * enrichSong() below fills in the real data. Deliberately does NOT create
- * Artist/Album records yet — we don't know them from a filename alone —
- * so that resolution, and the song-count bookkeeping that goes with it,
- * happens once, in enrichSong().
+ * the batched enrichment pass (src/db/batchEnrichRepo.js) fills in the
+ * real data. Deliberately does NOT create Artist/Album records yet — we
+ * don't know them from a filename alone — so that resolution, and the
+ * song-count bookkeeping that goes with it, happens once, during
+ * enrichment.
  */
 export async function seedPlaceholder({
   path,
@@ -81,105 +80,6 @@ export async function seedPlaceholder({
   return song;
 }
 
-/**
- * Phase 2: fills in the real tag/duration/artwork data for a file — either
- * a placeholder seeded by seedPlaceholder() above, or an existing song
- * being refreshed after an on-disk change. Both cases look up the current
- * record by path (a placeholder's generated id isn't known to the caller)
- * and replace it in place, so the row's id — and therefore anything
- * already rendering/subscribed to it — stays stable across the pending →
- * ready transition.
- */
-export async function enrichSong({
-  path,
-  dirHandleId,
-  fileName,
-  format,
-  size,
-  lastModified,
-  tags,
-}) {
-  const existing = await getByPath(path);
-  const wasPending = Boolean(existing?.pending);
-
-  const albumArtistName = tags.albumArtist || tags.artist || "Unknown Artist";
-  const albumArtistRec = await getOrCreateArtist(albumArtistName);
-  const trackArtistName = tags.artist || albumArtistName;
-  const trackArtistRec =
-    trackArtistName === albumArtistName
-      ? albumArtistRec
-      : await getOrCreateArtist(trackArtistName);
-
-  let artworkId = existing?.artworkId ?? null;
-  if (tags.artworkBytes) {
-    artworkId = await storeArtwork(tags.artworkBytes, tags.artworkMime);
-  }
-
-  const album = tags.album
-    ? await getOrCreateAlbum({
-        name: tags.album,
-        artistId: albumArtistRec.id,
-        year: tags.year,
-        artworkId,
-      })
-    : null;
-
-  const genreIds = await getOrCreateGenres(tags.genre || []);
-
-  const title = tags.title || fileName.replace(/\.[^./]+$/, "");
-  const db = await getDb();
-
-  const song = {
-    id: existing?.id ?? makeId("song"),
-    path,
-    dirHandleId,
-    fileName,
-    format,
-    size,
-    lastModified,
-    title,
-    titleLower: normalize(title),
-    artist: trackArtistName,
-    artistId: trackArtistRec.id,
-    album: tags.album || null,
-    albumId: album?.id ?? null,
-    albumArtist: albumArtistName,
-    trackNumber: tags.trackNumber ?? null,
-    discNumber: tags.discNumber ?? null,
-    genre: tags.genre || [],
-    genreIds,
-    year: tags.year ?? null,
-    duration: tags.duration ?? 0,
-    bitrate: tags.bitrate ?? null,
-    sampleRate: tags.sampleRate ?? null,
-    artworkId,
-    dateAdded: existing?.dateAdded ?? Date.now(),
-    lastPlayedAt: existing?.lastPlayedAt ?? null,
-    playCount: existing?.playCount ?? 0,
-    skipCount: existing?.skipCount ?? 0,
-    favorite: existing?.favorite ?? 0, // 0/1, not boolean — IndexedDB index keys can't be booleans
-    rating: existing?.rating ?? 0,
-    lyrics: tags.lyrics ?? null, // { synced: [{time,text}]|null, text: string|null } | null
-    lyricsCheckedAt: existing?.lyricsCheckedAt ?? null, // ms epoch — last time we asked LRCLIB, used to throttle retries on a confirmed-missing result
-    metadataSchemaVersion: METADATA_SCHEMA_VERSION,
-    pending: 0,
-  };
-
-  await db.put("songs", song);
-
-  // Count bookkeeping happens exactly once per song, at whichever pass
-  // first gives it a real artist/album — for a placeholder that's here,
-  // not seedPlaceholder(); for a plain new file with no placeholder stage
-  // (or a re-enrich of an already-complete song) it's the same rule
-  // upsertFromScan used to follow: only on that song's first resolution.
-  if (!existing || wasPending) {
-    await adjustArtistSongCount(trackArtistRec.id, 1);
-    if (album) await adjustAlbumSongCount(album.id, 1);
-  }
-
-  return song;
-}
-
 /** Removes a song that scanning discovered is no longer on disk. */
 export async function removeByPath(path) {
   const song = await getByPath(path);
@@ -197,8 +97,9 @@ export async function removeById(id) {
 async function _removeSongRecord(song) {
   const db = await getDb();
   await db.delete("songs", song.id);
-  // A placeholder never got its artist/album counted (see enrichSong), so
-  // don't decrement for one that's removed before enrichment ever runs.
+  // A placeholder never got its artist/album counted (see
+  // batchEnrichRepo.js), so don't decrement for one that's removed before
+  // enrichment ever runs.
   if (!song.pending) {
     await adjustArtistSongCount(song.artistId, -1);
     if (song.albumId) await adjustAlbumSongCount(song.albumId, -1);
@@ -289,7 +190,7 @@ export async function countByArtistId(artistId) {
  * bare filename with no artist/album isn't a useful search match yet, and
  * excluding them here means search/filter results never surface a track
  * that SongRow would just show disabled anyway. They join the index
- * automatically once enrichSong() clears the flag and the index next
+ * automatically once enrichment clears the flag and the index next
  * rebuilds.
  */
 export async function getAllLite() {

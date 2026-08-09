@@ -1,29 +1,42 @@
-// src/library/scanner.js — full rewrite (two-phase discover/enrich, concurrency, throttled notify, resume)
+// src/library/scanner.js — full rewrite: parsing (concurrent) decoupled from writing (batched, serialized)
 import { isSupportedFile, extensionOf } from "./formats.js";
 import { parseFileMetadata } from "./metadataParser.js";
 import { mergeLyrics } from "./lyrics.js";
 import { resolveFileHandles } from "./resolveFile.js";
 import { mapWithConcurrency } from "./concurrency.js";
+import { hashArtworkBytes } from "../db/artworkRepo.js";
+import { enrichSongsBatch } from "../db/batchEnrichRepo.js";
 import {
   getByPath,
   seedPlaceholder,
-  enrichSong,
   removeByPath,
   getPathsForDir,
   getPendingSongs,
 } from "../db/songsRepo.js";
 import { notifyLibraryChanged } from "../state/libraryBus.js";
 import { notifySongUpdated } from "../state/songUpdateBus.js";
+import { beginScanActivity, endScanActivity } from "./scanState.js";
 
-// How many files get their tags/duration/artwork parsed at once. This is
-// the expensive, CPU/IO-heavy part of a scan (music-metadata parsing,
-// SHA-256 hashing embedded artwork) — file reads and crypto.subtle.digest
-// are both genuinely async, so running a handful concurrently cuts real
-// wall-clock time without needing a Web Worker. If profiling ever shows
-// this still isn't enough, that's the next lever — directory handles are
-// structured-cloneable, so it's a contained change from here, not a
-// rewrite (see the original note this replaces on scanDirectory).
-const ENRICH_CONCURRENCY = 4;
+// How many files get read and tag-parsed at once. This is the part that's
+// genuinely safe to parallelize — real file I/O with real waits, no
+// shared state, no IndexedDB contention (writes are batched separately,
+// see WRITE_BATCH_SIZE below). Kept modest rather than pushed higher:
+// parsing is still real CPU work on the main thread (duration estimation
+// especially, for some codecs), and mobile Chromium is the primary
+// target.
+const PARSE_CONCURRENCY = 4;
+
+// How many parsed songs get resolved (artist/album/genre/artwork) and
+// written per IndexedDB transaction. This is the actual fix for
+// enrichment feeling slow: a single song used to cost ~15-20 separate
+// transactions on its own (one each for the track artist, album artist,
+// album, a nested one for the artist's albumCount, one per genre, one for
+// artwork, the song itself, then two more for count bookkeeping) — that
+// per-transaction overhead, not tag parsing, was the real bottleneck.
+// Batching lets songs sharing an artist/album (extremely common — most of
+// an album gets discovered in the same pass) resolve against each other
+// in memory instead of hitting IndexedDB again each time.
+const WRITE_BATCH_SIZE = 40;
 
 /**
  * Recursively walks a directory handle, yielding every supported audio
@@ -84,21 +97,73 @@ function makeThrottledNotifier(minIntervalMs = 400) {
 }
 
 /**
- * Phase 2 (shared by scanDirectory and resumePendingEnrichment): the
- * expensive per-file work, run with bounded concurrency. Each item
- * already carries a live file + handles — this doesn't re-resolve
- * anything on its own.
+ * Phase 2 (shared by scanDirectory and resumePendingEnrichment): reads
+ * and tag-parses everything concurrently (PARSE_CONCURRENCY at a time),
+ * while a separate, serialized chain drains whatever's parsed into
+ * IndexedDB in batches of WRITE_BATCH_SIZE as it becomes available —
+ * parsing keeps racing ahead at full concurrency the whole time, it's
+ * only the actual writes that are serialized (one batch transaction in
+ * flight at once; see enrichSongsBatch's own reasoning for why that's
+ * still a huge win over one transaction per song).
  */
 async function enrichQueued(queue, { onProgress, totalStats, notify }) {
-  let done = 0;
-  await mapWithConcurrency(queue, ENRICH_CONCURRENCY, async (item) => {
-    const { fileHandle, parentHandle, path, file, isNew, dirHandleId } = item;
+  const total = queue.length;
+  const pendingWrite = [];
+  let writtenCount = 0;
+  let writeChain = Promise.resolve();
+
+  function drain(force) {
+    writeChain = writeChain.then(async () => {
+      while (
+        pendingWrite.length >= WRITE_BATCH_SIZE ||
+        (force && pendingWrite.length > 0)
+      ) {
+        const chunk = pendingWrite.splice(0, WRITE_BATCH_SIZE);
+        try {
+          const results = await enrichSongsBatch(chunk);
+          for (const result of results) {
+            if (!result.ok) {
+              totalStats.errors += 1;
+              console.warn(
+                `[motif/scanner] failed to enrich ${result.path}:`,
+                result.error,
+              );
+              continue;
+            }
+            totalStats[result.isNew ? "created" : "updated"] += 1;
+            notifySongUpdated(result.song); // flips this exact row from pending -> ready, wherever it's rendered
+          }
+        } catch (err) {
+          // Whole-batch failure (e.g. the transaction itself aborted) —
+          // treat everything in it as failed rather than losing track of
+          // it silently. Individual bad items are already caught inside
+          // enrichSongsBatch and don't reach this branch.
+          totalStats.errors += chunk.length;
+          console.warn("[motif/scanner] batch write failed:", err);
+        }
+        writtenCount += chunk.length;
+        notify();
+        onProgress?.({
+          ...totalStats,
+          phase: "enriching",
+          enrichedCount: writtenCount,
+          enrichedTotal: total,
+        });
+      }
+    });
+    return writeChain;
+  }
+
+  await mapWithConcurrency(queue, PARSE_CONCURRENCY, async (item) => {
+    const { parentHandle, path, file, dirHandleId } = item;
     try {
       const tags = await parseFileMetadata(file);
       const lrcText = await readSidecarLrc(parentHandle, file.name);
       tags.lyrics = mergeLyrics({ lrcText, embedded: tags.embeddedLyrics });
-
-      const song = await enrichSong({
+      const artworkHash = tags.artworkBytes
+        ? await hashArtworkBytes(tags.artworkBytes)
+        : null;
+      pendingWrite.push({
         path,
         dirHandleId,
         fileName: file.name,
@@ -106,24 +171,16 @@ async function enrichQueued(queue, { onProgress, totalStats, notify }) {
         size: file.size,
         lastModified: file.lastModified,
         tags,
+        artworkHash,
       });
-      totalStats[isNew ? "created" : "updated"] += 1;
-      notifySongUpdated(song); // flips this exact row from pending -> ready, wherever it's rendered
     } catch (err) {
       totalStats.errors += 1;
-      console.warn(`[motif/scanner] failed to enrich ${path}:`, err);
-    } finally {
-      done += 1;
-      notify();
-      onProgress?.({
-        ...totalStats,
-        currentFile: path,
-        phase: "enriching",
-        enrichedCount: done,
-        enrichedTotal: queue.length,
-      });
+      console.warn(`[motif/scanner] failed to read ${path}:`, err);
     }
+    drain(false); // fire-and-forget: keeps parsing going, doesn't wait on the write
   });
+
+  await drain(true); // flush whatever's left — a final partial batch
 }
 
 /**
@@ -137,103 +194,100 @@ async function enrichQueued(queue, { onProgress, totalStats, notify }) {
  *     This phase does no metadata parsing, so it stays fast even over a
  *     very large tree.
  *  2. Enrichment — the actual tag/duration/artwork work, for everything
- *     phase 1 queued up, run concurrently (see enrichQueued above).
+ *     phase 1 queued up (see enrichQueued above).
  *
  * Cooperative-yields to the event loop periodically during discovery so a
  * 250k-file library doesn't freeze the UI thread.
  */
 export async function scanDirectory(dirHandleRecord, { onProgress } = {}) {
-  const { handle, id: dirHandleId } = dirHandleRecord;
-  const notify = makeThrottledNotifier();
+  beginScanActivity();
+  try {
+    const { handle, id: dirHandleId } = dirHandleRecord;
+    const notify = makeThrottledNotifier();
 
-  const stillPresent = new Set();
-  const toEnrich = [];
-  const stats = { scanned: 0, seeded: 0, changed: 0, unchanged: 0, errors: 0 };
+    const stillPresent = new Set();
+    const toEnrich = [];
+    const stats = {
+      scanned: 0,
+      seeded: 0,
+      changed: 0,
+      unchanged: 0,
+      errors: 0,
+    };
 
-  let i = 0;
-  for await (const { fileHandle, parentHandle, path } of walk(handle)) {
-    i += 1;
-    stillPresent.add(path);
-    try {
-      const file = await fileHandle.getFile(); // cheap: file stats only, no content read
-      const existing = await getByPath(path);
+    let i = 0;
+    for await (const { fileHandle, parentHandle, path } of walk(handle)) {
+      i += 1;
+      stillPresent.add(path);
+      try {
+        const file = await fileHandle.getFile(); // cheap: file stats only, no content read
+        const existing = await getByPath(path);
 
-      if (
-        existing &&
-        !existing.pending &&
-        existing.size === file.size &&
-        existing.lastModified === file.lastModified
-      ) {
-        stats.unchanged += 1;
-      } else if (existing) {
-        // Either genuinely changed on disk, or a leftover pending
-        // placeholder from an interrupted scan — either way it needs
-        // (re-)enrichment, without disturbing whatever's currently shown.
-        toEnrich.push({
-          fileHandle,
-          parentHandle,
-          path,
-          file,
-          isNew: false,
-          dirHandleId,
-        });
-        stats.changed += 1;
-      } else {
-        await seedPlaceholder({
-          path,
-          dirHandleId,
-          fileName: file.name,
-          format: extensionOf(file.name),
-          size: file.size,
-          lastModified: file.lastModified,
-        });
-        notify();
-        toEnrich.push({
-          fileHandle,
-          parentHandle,
-          path,
-          file,
-          isNew: true,
-          dirHandleId,
-        });
-        stats.seeded += 1;
+        if (
+          existing &&
+          !existing.pending &&
+          existing.size === file.size &&
+          existing.lastModified === file.lastModified
+        ) {
+          stats.unchanged += 1;
+        } else if (existing) {
+          // Either genuinely changed on disk, or a leftover pending
+          // placeholder from an interrupted scan — either way it needs
+          // (re-)enrichment, without disturbing whatever's currently shown.
+          toEnrich.push({ parentHandle, path, file, dirHandleId });
+          stats.changed += 1;
+        } else {
+          await seedPlaceholder({
+            path,
+            dirHandleId,
+            fileName: file.name,
+            format: extensionOf(file.name),
+            size: file.size,
+            lastModified: file.lastModified,
+          });
+          notify();
+          toEnrich.push({ parentHandle, path, file, dirHandleId });
+          stats.seeded += 1;
+        }
+      } catch (err) {
+        stats.errors += 1;
+        console.warn(`[motif/scanner] failed on ${path}:`, err);
       }
-    } catch (err) {
-      stats.errors += 1;
-      console.warn(`[motif/scanner] failed on ${path}:`, err);
+
+      stats.scanned = i;
+      if (onProgress && i % 10 === 0)
+        onProgress({ ...stats, currentFile: path, phase: "discovering" });
+      if (i % 25 === 0) await new Promise((resolve) => setTimeout(resolve, 0));
     }
 
-    stats.scanned = i;
-    if (onProgress && i % 10 === 0)
-      onProgress({ ...stats, currentFile: path, phase: "discovering" });
-    if (i % 25 === 0) await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-
-  // Anything previously recorded for this directory that we didn't see
-  // this pass has been deleted or moved out from under us.
-  const knownPaths = await getPathsForDir(dirHandleId);
-  let removed = 0;
-  for (const path of knownPaths) {
-    if (!stillPresent.has(path)) {
-      await removeByPath(path);
-      removed += 1;
+    // Anything previously recorded for this directory that we didn't see
+    // this pass has been deleted or moved out from under us.
+    const knownPaths = await getPathsForDir(dirHandleId);
+    let removed = 0;
+    for (const path of knownPaths) {
+      if (!stillPresent.has(path)) {
+        await removeByPath(path);
+        removed += 1;
+      }
     }
+    notify();
+
+    const totalStats = {
+      created: 0,
+      updated: 0,
+      unchanged: stats.unchanged,
+      removed,
+      errors: stats.errors,
+    };
+
+    await enrichQueued(toEnrich, { onProgress, totalStats, notify });
+
+    notifyLibraryChanged(); // unconditional final flush, bypassing the throttle
+    onProgress?.({ ...totalStats, currentFile: null, done: true });
+    return totalStats;
+  } finally {
+    endScanActivity();
   }
-  notify();
-
-  const totalStats = {
-    created: 0,
-    updated: 0,
-    unchanged: stats.unchanged,
-    removed,
-    errors: stats.errors,
-  };
-
-  await enrichQueued(toEnrich, { onProgress, totalStats, notify });
-
-  notifyLibraryChanged(); // unconditional final flush, bypassing the throttle
-  onProgress?.({ ...totalStats, currentFile: null, done: true });
-  return totalStats;
 }
 
 /**
@@ -245,41 +299,44 @@ export async function scanDirectory(dirHandleRecord, { onProgress } = {}) {
  * because the person's rescan setting is manual.
  */
 export async function resumePendingEnrichment({ onProgress } = {}) {
-  const pending = await getPendingSongs();
-  const totalStats = {
-    created: 0,
-    updated: 0,
-    unchanged: 0,
-    removed: 0,
-    errors: 0,
-  };
-  if (!pending.length) return totalStats;
+  beginScanActivity();
+  try {
+    const pending = await getPendingSongs();
+    const totalStats = {
+      created: 0,
+      updated: 0,
+      unchanged: 0,
+      removed: 0,
+      errors: 0,
+    };
+    if (!pending.length) return totalStats;
 
-  const notify = makeThrottledNotifier();
-  const queue = [];
-  for (const song of pending) {
-    try {
-      const { fileHandle, parentHandle } = await resolveFileHandles(song);
-      const file = await fileHandle.getFile();
-      queue.push({
-        fileHandle,
-        parentHandle,
-        path: song.path,
-        file,
-        isNew: true,
-        dirHandleId: song.dirHandleId,
-      });
-    } catch (err) {
-      totalStats.errors += 1;
-      console.warn(
-        "[motif/scanner] could not resume pending song",
-        song.path,
-        err,
-      );
+    const notify = makeThrottledNotifier();
+    const queue = [];
+    for (const song of pending) {
+      try {
+        const { fileHandle, parentHandle } = await resolveFileHandles(song);
+        const file = await fileHandle.getFile();
+        queue.push({
+          parentHandle,
+          path: song.path,
+          file,
+          dirHandleId: song.dirHandleId,
+        });
+      } catch (err) {
+        totalStats.errors += 1;
+        console.warn(
+          "[motif/scanner] could not resume pending song",
+          song.path,
+          err,
+        );
+      }
     }
-  }
 
-  await enrichQueued(queue, { onProgress, totalStats, notify });
-  notifyLibraryChanged();
-  return totalStats;
+    await enrichQueued(queue, { onProgress, totalStats, notify });
+    notifyLibraryChanged();
+    return totalStats;
+  } finally {
+    endScanActivity();
+  }
 }

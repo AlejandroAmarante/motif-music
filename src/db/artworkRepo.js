@@ -1,7 +1,17 @@
+// src/db/artworkRepo.js — full updated file (hashArtworkBytes extracted and exported)
 import { getDb } from "./db.js";
 import { makeId } from "../utils/id.js";
 
-async function hashBytes(bytes) {
+/**
+ * Split out from storeArtwork() below so batchEnrichRepo.js can hash
+ * artwork bytes ahead of time, during a scan's parallel parse phase — the
+ * hash has to be ready *before* that phase's results get written inside a
+ * shared IndexedDB transaction, since awaiting anything that isn't itself
+ * an IDB request partway through an open transaction (crypto.subtle here,
+ * same as fetch or setTimeout) can cause it to auto-close.
+ */
+export async function hashArtworkBytes(bytes) {
+  if (!bytes || bytes.byteLength === 0) return null;
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest))
     .map((b) => b.toString(16).padStart(2, "0"))
@@ -9,8 +19,8 @@ async function hashBytes(bytes) {
 }
 
 export async function storeArtwork(bytes, mimeType) {
-  if (!bytes || bytes.byteLength === 0) return null;
-  const hash = await hashBytes(bytes);
+  const hash = await hashArtworkBytes(bytes);
+  if (!hash) return null;
   const db = await getDb();
   const existing = await db.getFromIndex("cachedArtwork", "byHash", hash);
   if (existing) return existing.id;
