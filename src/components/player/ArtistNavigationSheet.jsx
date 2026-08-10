@@ -1,43 +1,75 @@
-// src/components/player/ArtistNavigationSheet.jsx — NEW
-import { useMountTransition } from "../../utils/useMountTransition.js";
+// src/components/player/ArtistNavigationSheet.jsx
 
-/**
- * Shown from Now Playing when tapping the artist name is ambiguous —
- * more than one local track by the artist, and this track has an album —
- * so "View Artist" and "View Album" are genuinely different places to go.
- * See resolveArtistNavigation() in src/library/navigation.js for when this
- * fires versus navigating directly.
- */
+import { AnimatePresence, motion } from "motion/react";
+
+const sheetTransition = {
+	duration: 0.22,
+	ease: [0.22, 1, 0.36, 1],
+};
+
+const scrimTransition = {
+	duration: 0.18,
+	ease: "easeOut",
+};
+
 export function ArtistNavigationSheet({
-  isOpen,
-  artistName,
-  onClose,
-  onViewArtist,
-  onViewAlbum,
+	isOpen,
+	artistName,
+	onClose,
+	onViewArtist,
+	onViewAlbum,
 }) {
-  const { shouldRender, entered } = useMountTransition(isOpen, 220);
+	return (
+		<AnimatePresence>
+			{isOpen && (
+				<>
+					<motion.div
+						key="nav-sheet-scrim"
+						className="nav-sheet__scrim"
+						onClick={onClose}
+						role="presentation"
+						initial={{ opacity: 0 }}
+						animate={{ opacity: 1 }}
+						exit={{ opacity: 0 }}
+						transition={scrimTransition}
+					/>
 
-  if (!shouldRender) return null;
+					<motion.div
+						key="nav-sheet"
+						className="nav-sheet"
+						initial={{ y: "100%" }}
+						animate={{ y: 0 }}
+						exit={{ y: "100%" }}
+						transition={sheetTransition}
+					>
+						<p className="nav-sheet__title">
+							{artistName}
+						</p>
 
-  return (
-    <>
-      <div
-        className={`nav-sheet__scrim${entered ? " is-open" : ""}`}
-        onClick={onClose}
-        role="presentation"
-      />
-      <div className={`nav-sheet${entered ? " is-open" : ""}`}>
-        <p className="nav-sheet__title">{artistName}</p>
-        <button className="nav-sheet__option" onClick={onViewArtist}>
-          View Artist
-        </button>
-        <button className="nav-sheet__option" onClick={onViewAlbum}>
-          View Album
-        </button>
-        <button className="nav-sheet__cancel" onClick={onClose}>
-          Cancel
-        </button>
-      </div>
-    </>
-  );
+						<button
+							className="nav-sheet__option"
+							onClick={onViewArtist}
+						>
+							View Artist
+						</button>
+
+						<button
+							className="nav-sheet__option"
+							onClick={onViewAlbum}
+						>
+							View Album
+						</button>
+
+						<button
+							className="nav-sheet__cancel"
+							onClick={onClose}
+						>
+							Cancel
+						</button>
+					</motion.div>
+				</>
+			)}
+		</AnimatePresence>
+	);
 }
+;

@@ -5,8 +5,6 @@
    Type: Newsreader (serif, section titles and large headings) +
    Inter (sans, everything functional: body, buttons, inputs, labels)
    + JetBrains Mono (numeric data — bitrate, duration, track counts).
-   Motion: every entrance has a matching, mirrored exit — see
-   useMountTransition.js and the --ease/--duration tokens below.
    ============================================================ */
 
 :root {

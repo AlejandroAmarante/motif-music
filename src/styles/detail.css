@@ -249,11 +249,7 @@
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   padding: var(--space-4) var(--space-4)
     calc(var(--safe-bottom) + var(--space-4));
-  transform: translateY(100%);
   transition: transform var(--duration-base) var(--ease-standard);
-}
-.nav-sheet.is-open {
-  transform: translateY(0);
 }
 .nav-sheet__title {
   padding-bottom: 6px;

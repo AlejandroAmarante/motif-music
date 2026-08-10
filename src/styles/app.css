@@ -157,13 +157,8 @@
   flex-direction: column;
   background: var(--bg);
   padding: calc(var(--safe-top) + 8px) 22px calc(var(--safe-bottom) + 24px);
-  transform: translateY(100%);
-  transition: transform var(--duration-slow) var(--ease-standard);
   --marquee-fade-bg: var(--bg);
 
-}
-.now-playing.is-open {
-  transform: translateY(0);
 }
 .now-playing__handle-zone {
   display: flex;
@@ -882,11 +877,7 @@
   flex-direction: column;
   background: var(--bg);
   padding: calc(var(--safe-top) + 8px) 28px calc(var(--safe-bottom) + 24px);
-  transform: translateY(100%);
   transition: transform var(--duration-slow) var(--ease-standard);
-}
-.settings-overlay.is-open {
-  transform: translateY(0);
 }
 .settings-overlay__body section {
   padding-bottom: var(--space-6);
@@ -1111,11 +1102,6 @@
   flex-direction: column;
   background: var(--bg);
   padding: calc(var(--safe-top) + 8px) 22px calc(var(--safe-bottom) + 24px);
-  transform: translateY(100%);
-  transition: transform var(--duration-slow) var(--ease-standard);
-}
-.lyrics-view.is-open {
-  transform: translateY(0);
 }
 .lyrics-view__body {
   flex: 1;
