@@ -19,18 +19,45 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
-      - run: npm ci
+      - name: Install dependencies
+        run: npm ci
 
-      - run: npm run build
+      - name: Build
+        run: npm run build
 
-      - uses: actions/upload-pages-artifact@v3
+      - name: Verify build
+        run: |
+          echo "Checking generated icons..."
+
+          test -f dist/icons/icon-192.png
+          test -f dist/icons/icon-512.png
+          test -f dist/icons/icon-maskable-512.png
+          test -f dist/icons/apple-touch-icon.png
+          test -f dist/icons/favicon-32x32.png
+          test -f dist/icons/favicon-16x16.png
+
+          echo "Checking PWA manifest..."
+
+          test -f dist/manifest.webmanifest
+
+          echo ""
+          echo "Build contents:"
+          find dist -maxdepth 2 -type f | sort
+
+          echo ""
+          echo "Build verification successful."
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
           path: ./dist
 
@@ -48,5 +75,6 @@ jobs:
       id-token: write
 
     steps:
-      - id: deployment
+      - name: Deploy to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4

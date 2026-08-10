@@ -3,7 +3,6 @@ import path from "node:path";
 import sharp from "sharp";
 
 const root = process.cwd();
-
 const iconDir = path.join(root, "public", "icons");
 
 const icons = [
@@ -51,6 +50,8 @@ async function generateIcon({ input, output, size }) {
 }
 
 async function main() {
+  await fs.mkdir(iconDir, { recursive: true });
+
   await Promise.all(icons.map(generateIcon));
 
   console.log("\nAll icons generated successfully.");
