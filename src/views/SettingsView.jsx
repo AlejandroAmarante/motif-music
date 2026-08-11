@@ -1,4 +1,3 @@
-// src/views/SettingsView.jsx — full updated file
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
@@ -54,8 +53,11 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
   const estimate = useStorageEstimate();
 
   const [discogsToken, setDiscogsToken] = useState("");
+
   const [lastfmApiKey, setLastfmApiKey] = useState("");
+
   const [resettingSetup, setResettingSetup] = useState(false);
+
   const [addingSample, setAddingSample] = useState(false);
 
   const { supported, motifFolderExists, createMotifFolder, folders, rescan } =
@@ -71,9 +73,13 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
   } = useUpdateManager();
 
   useEffect(() => {
-    getSetting("discogsToken", "").then((v) => setDiscogsToken(v || ""));
+    getSetting("discogsToken", "").then((value) =>
+      setDiscogsToken(value || ""),
+    );
 
-    getSetting("lastfmApiKey", "").then((v) => setLastfmApiKey(v || ""));
+    getSetting("lastfmApiKey", "").then((value) =>
+      setLastfmApiKey(value || ""),
+    );
   }, []);
 
   const handleResetSetup = async () => {
@@ -81,9 +87,6 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
 
     try {
       await resetSetup();
-      // resetSetup() reloads the page on success, so nothing after this
-      // line normally runs — the catch below only matters if it throws
-      // before getting there (e.g. IndexedDB write failure).
     } catch (err) {
       setResettingSetup(false);
 
@@ -93,10 +96,12 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
     }
   };
 
-  // Same import used during first-run setup, just reachable any time
-  // afterward too. Targets the first connected folder — good enough for
-  // the common single-folder case; someone managing several folders can
-  // already see which one it landed in via "Manage connected folders".
+  /*
+   * Same import used during first-run setup, just reachable any time
+   * afterward too. Targets the first connected folder — good enough for
+   * the common single-folder case; someone managing several folders can
+   * already see which one it landed in via "Manage connected folders".
+   */
   const handleAddSampleTrack = async () => {
     if (!folders.length) return;
 
@@ -112,6 +117,7 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
       }
 
       await importSampleTrack(target.handle);
+
       await rescan();
 
       pushToast("Sample track added to your library.", {
@@ -165,7 +171,9 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
               {supported && !motifFolderExists && (
                 <button
                   className="settings-overlay__sample-btn"
-                  style={{ marginTop: 10 }}
+                  style={{
+                    marginTop: 10,
+                  }}
                   onClick={createMotifFolder}
                 >
                   Create Motif Music Folder
@@ -174,7 +182,9 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
 
               <button
                 className="settings-overlay__sample-btn"
-                style={{ marginTop: 10 }}
+                style={{
+                  marginTop: 10,
+                }}
                 onClick={handleAddSampleTrack}
                 disabled={addingSample || folders.length === 0}
               >
@@ -191,11 +201,16 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
             <section>
               <SectionTitle icon={Image}>Artwork</SectionTitle>
 
-              <p className="settings-overlay__note" style={{ marginBottom: 8 }}>
+              <p
+                className="settings-overlay__note"
+                style={{
+                  marginBottom: 8,
+                }}
+              >
                 Missing album art is looked up automatically via MusicBrainz and
-                Deezer, once per album, and cached — no setup needed. Discogs is
-                used only as a last resort and only if you supply your own free
-                personal access token below.
+                Deezer, once per album, and cached. Discogs is used only as a
+                last resort and only if you supply your own free personal access
+                token below.
               </p>
 
               <input
@@ -211,13 +226,18 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
             </section>
 
             <section>
-              <SectionTitle icon={Users}>Artist Photos</SectionTitle>
+              <SectionTitle icon={Users}>Artist Information</SectionTitle>
 
-              <p className="settings-overlay__note" style={{ marginBottom: 8 }}>
-                Artist tags and info come from MusicBrainz automatically. For
-                artist photos specifically, add a free Last.fm API key below —
-                without one, the Artist page falls back to a photo from one of
-                the artist's own albums.
+              <p
+                className="settings-overlay__note"
+                style={{
+                  marginBottom: 8,
+                }}
+              >
+                Artist photos are looked up automatically through Deezer.
+                MusicBrainz provides artist identity and tags. Optionally add a
+                Last.fm API key to provide artist biographies, tags, listening
+                statistics, and other supplementary artist information.
               </p>
 
               <input
@@ -254,7 +274,12 @@ export function SettingsView({ isOpen, onClose, onOpenFolders }) {
                 )}
               </div>
 
-              <p className="settings-overlay__note" style={{ marginBottom: 8 }}>
+              <p
+                className="settings-overlay__note"
+                style={{
+                  marginBottom: 8,
+                }}
+              >
                 {needRefresh
                   ? "An update has downloaded and is ready to apply."
                   : "Motif checks for a new version and installs it in the background."}

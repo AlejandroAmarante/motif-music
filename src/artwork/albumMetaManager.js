@@ -1,41 +1,59 @@
-// src/artwork/albumMetaManager.js — NEW
 import { getAlbumMetaCache, putAlbumMetaCache } from "../db/albumMetaRepo.js";
 import { findMusicBrainzReleaseMeta } from "./providers/musicbrainzReleaseProvider.js";
 
-const FAILURE_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24h, matches album artwork's cooldown
+const FAILURE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 const inFlightRequests = new Map();
 
 function isCacheFresh(entry) {
   if (!entry) return false;
-  if (entry.failed) return Date.now() < (entry.retryAfter ?? 0);
+
+  if (entry.failed) {
+    return Date.now() < (entry.retryAfter ?? 0);
+  }
+
   return true;
 }
 
 /**
- * Resolves (and caches) Album-view enrichment — release date/country/status
- * from MusicBrainz. Album artwork itself is handled separately by
- * artworkManager.js; this is purely supplementary metadata for the
- * subtitle line under the album title.
+ * Resolves and caches Album-view enrichment:
+ * release date, country, status, and track count.
+ *
+ * Album artwork itself is handled separately by artworkManager.js.
  */
 export function resolveAlbumMeta({ id, name, artistName }) {
-  if (!id) return Promise.resolve(null);
+  if (!id) {
+    return Promise.resolve(null);
+  }
 
   const inFlight = inFlightRequests.get(id);
-  if (inFlight) return inFlight;
 
-  const promise = runPipeline({ id, name, artistName }).finally(() => {
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const promise = runPipeline({
+    id,
+    name,
+    artistName,
+  }).finally(() => {
     inFlightRequests.delete(id);
   });
+
   inFlightRequests.set(id, promise);
+
   return promise;
 }
 
 async function runPipeline({ id, name, artistName }) {
   const cached = await getAlbumMetaCache(id);
-  if (isCacheFresh(cached)) return cached.failed ? null : cached;
+
+  if (isCacheFresh(cached)) {
+    return cached.failed ? null : cached;
+  }
 
   let found = null;
+
   try {
     found = await findMusicBrainzReleaseMeta({
       artist: artistName,
@@ -55,6 +73,7 @@ async function runPipeline({ id, name, artistName }) {
       cachedAt: Date.now(),
       retryAfter: Date.now() + FAILURE_COOLDOWN_MS,
     });
+
     return null;
   }
 
@@ -65,6 +84,8 @@ async function runPipeline({ id, name, artistName }) {
     failed: false,
     retryAfter: null,
   };
+
   await putAlbumMetaCache(entry);
+
   return entry;
 }

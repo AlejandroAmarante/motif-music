@@ -1,4 +1,3 @@
-// src/artwork/providers/lastfmProvider.js — NEW
 const LASTFM_BASE = "https://ws.audioscrobbler.com/2.0/";
 
 function stripHtml(str) {
@@ -6,44 +5,68 @@ function stripHtml(str) {
 }
 
 /**
- * Last.fm's artist.getinfo is the only free source Motif uses that reliably
- * returns an artist *photo* (MusicBrainz and Cover Art Archive don't have
- * one). It requires a personal API key, so this is entirely opt-in — see
- * `lastfmApiKey` in Settings — and is a silent no-op without one, same
- * pattern as the Discogs artwork provider.
+ * Last.fm artist metadata.
+ *
+ * Last.fm is intentionally NOT used for artist artwork.
+ *
+ * This provider supplies:
+ * - biography
+ * - tags
+ * - MBID
+ *
+ * Artist images are handled separately by the Deezer provider.
+ *
+ * When a MusicBrainz ID is available, it is preferred over
+ * artist-name matching because it provides a more reliable
+ * artist identity.
  */
-export async function findLastfmArtistMeta({ name, apiKey }) {
-  if (!name || !apiKey) return null;
+export async function findLastfmArtistMeta({ name, mbid = null, apiKey }) {
+  if ((!name && !mbid) || !apiKey) return null;
+
   try {
     const params = new URLSearchParams({
       method: "artist.getinfo",
-      artist: name,
       api_key: apiKey,
       format: "json",
+      autocorrect: "1",
     });
+
+    if (mbid) {
+      params.set("mbid", mbid);
+    } else {
+      params.set("artist", name);
+    }
+
     const res = await fetch(`${LASTFM_BASE}?${params.toString()}`);
-    if (!res.ok) return null;
+
+    if (!res.ok) {
+      console.warn(`[motif/artist] Last.fm returned HTTP ${res.status}`);
+      return null;
+    }
+
     const data = await res.json();
+
+    if (data.error) {
+      console.warn(
+        `[motif/artist] Last.fm error ${data.error}: ${data.message}`,
+      );
+      return null;
+    }
+
     const artist = data.artist;
+
     if (!artist) return null;
 
-    const images = Array.isArray(artist.image) ? artist.image : [];
-    const preferred =
-      images.find((img) => img.size === "extralarge" || img.size === "mega") ||
-      images[images.length - 1];
-    const imageUrl = preferred?.["#text"]?.trim() || null;
-
     const tags = Array.isArray(artist.tags?.tag)
-      ? artist.tags.tag.map((t) => t.name).filter(Boolean)
+      ? artist.tags.tag.map((tag) => tag.name).filter(Boolean)
       : [];
 
     const bio = artist.bio?.summary ? stripHtml(artist.bio.summary) : null;
 
     return {
-      imageUrl: imageUrl || null,
       tags,
       bio,
-      mbid: artist.mbid || null,
+      mbid: artist.mbid || mbid || null,
     };
   } catch (err) {
     console.warn("[motif/artist] Last.fm lookup failed:", err.message);

@@ -1,22 +1,35 @@
-// src/artwork/providers/musicbrainzReleaseProvider.js — NEW
 const MB_BASE = "https://musicbrainz.org/ws/2";
 
 /**
- * Supplementary release info for the Album view — release date, country,
- * status (official/bootleg/etc). Album *artwork* is already handled by
- * musicbrainzProvider.js + Cover Art Archive; this is metadata-only.
+ * Supplementary release information for the Album view.
+ *
+ * Album artwork itself is handled separately by musicbrainzProvider.js
+ * and Cover Art Archive.
  */
 export async function findMusicBrainzReleaseMeta({ artist, album }) {
   if (!artist || !album) return null;
+
   try {
     const query = `release:"${album}" AND artist:"${artist}"`;
-    const params = new URLSearchParams({ query, fmt: "json", limit: "5" });
-    const res = await fetch(`${MB_BASE}/release/?${params.toString()}`, {
-      headers: { Accept: "application/json" },
+
+    const params = new URLSearchParams({
+      query,
+      fmt: "json",
+      limit: "5",
     });
+
+    const res = await fetch(`${MB_BASE}/release/?${params.toString()}`, {
+      headers: {
+        Accept: "application/json",
+      },
+    });
+
     if (!res.ok) return null;
+
     const data = await res.json();
+
     const match = data.releases?.[0];
+
     if (!match) return null;
 
     return {
@@ -31,6 +44,7 @@ export async function findMusicBrainzReleaseMeta({ artist, album }) {
       "[motif/album] MusicBrainz release lookup failed:",
       err.message,
     );
+
     return null;
   }
 }
