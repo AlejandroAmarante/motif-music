@@ -37,7 +37,7 @@ self.onmessage = async (event) => {
      * need to extract and materialize cover images for every track.
      */
     const metadata = await parseBlob(file, {
-      duration: true,
+      duration: false,
       skipCovers: true,
     });
 
