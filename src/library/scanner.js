@@ -333,8 +333,9 @@ async function enrichQueued(
        */
       const lrcStartedAt = performance.now();
 
-      const lrcText = await readSidecarLrc(parentHandle, file.name);
+      // const lrcText = await readSidecarLrc(parentHandle, file.name);
 
+      const lrcText = null;
       const lrcMs = performance.now() - lrcStartedAt;
 
       tags.lyrics = mergeLyrics({
