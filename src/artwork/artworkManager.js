@@ -19,20 +19,17 @@ const ONLINE_PROVIDERS = [
 ];
 
 const inFlightRequests = new Map();
+
 const notifiedFailures = new Set();
 const notifiedSearching = new Set();
 const notifiedLoaded = new Set();
 
 /**
- * Caps how many different albums can be resolving artwork over the
- * network at once.
- *
- * resolveAlbumArtwork() already deduplicates requests for the same
- * album, while this gate prevents a large library scan from firing
- * dozens of different provider requests simultaneously.
+ * Caps simultaneous online album-art requests.
  */
 function createConcurrencyGate(limit) {
   let active = 0;
+
   const queue = [];
 
   function runNext() {
@@ -44,18 +41,20 @@ function createConcurrencyGate(limit) {
 
     const { task, resolve, reject } = queue.shift();
 
-    task().then(
-      (result) => {
-        active -= 1;
-        resolve(result);
-        runNext();
-      },
-      (err) => {
-        active -= 1;
-        reject(err);
-        runNext();
-      },
-    );
+    Promise.resolve()
+      .then(task)
+      .then(
+        (result) => {
+          active -= 1;
+          resolve(result);
+          runNext();
+        },
+        (err) => {
+          active -= 1;
+          reject(err);
+          runNext();
+        },
+      );
   }
 
   return function gate(task) {
@@ -74,7 +73,9 @@ function createConcurrencyGate(limit) {
 const artworkGate = createConcurrencyGate(2);
 
 function isCacheFresh(entry) {
-  if (!entry) return false;
+  if (!entry) {
+    return false;
+  }
 
   if (entry.failed) {
     return Date.now() < (entry.retryAfter ?? 0);
@@ -84,7 +85,9 @@ function isCacheFresh(entry) {
 }
 
 export function albumArtworkContext(song) {
-  if (!song) return null;
+  if (!song) {
+    return null;
+  }
 
   const albumKey = song.albumId || (song.id ? `song:${song.id}` : null);
 
@@ -130,22 +133,106 @@ export function resolveAlbumArtwork(ctx) {
 }
 
 export function prefetchAlbumArtwork(ctx) {
-  if (!ctx?.albumKey) return;
+  if (!ctx?.albumKey) {
+    return;
+  }
 
   resolveAlbumArtwork(ctx).catch(() => {});
 }
 
 /**
- * Persists the resolved artworkId onto the album and its songs so a
- * future fresh load can skip the network pipeline entirely.
+ * Registers artwork extracted directly from a local music file.
+ *
+ * Embedded artwork is treated as the preferred local source because it belongs
+ * to the actual file/release. Existing non-failed artwork remains untouched,
+ * preventing a later scan from replacing an already-resolved online image.
+ */
+export async function registerEmbeddedArtwork({
+  albumId,
+  artist,
+  album,
+  artworkId,
+}) {
+  if (!albumId || !artworkId) {
+    return null;
+  }
+
+  const albumKey = albumId;
+
+  try {
+    const existing = await getAlbumArtworkCache(albumKey);
+
+    /*
+     * A previously resolved artwork source wins over a new embedded
+     * extraction. This is important if a user already has a cached online
+     * image or if artwork was manually resolved before the scan completed.
+     *
+     * A failure entry does NOT block embedded artwork.
+     */
+    if (
+      existing &&
+      !existing.failed &&
+      (existing.artworkId || existing.artworkUrl)
+    ) {
+      if (existing.artworkId && albumId) {
+        await backfillAlbum(albumId, existing.artworkId);
+      }
+
+      return existing.artworkId
+        ? {
+            artworkId: existing.artworkId,
+          }
+        : {
+            artworkUrl: existing.artworkUrl,
+          };
+    }
+
+    const entry = {
+      key: albumKey,
+      artist: artist ?? null,
+      album: album ?? null,
+      mbid: null,
+      provider: "embedded",
+      artworkId,
+      artworkUrl: null,
+      cachedAt: Date.now(),
+      failed: false,
+      failedAt: null,
+      retryAfter: null,
+    };
+
+    await putAlbumArtworkCache(entry);
+
+    await backfillAlbum(albumId, artworkId);
+
+    return {
+      artworkId,
+    };
+  } catch (err) {
+    console.warn(
+      "[motif/artwork] failed to register embedded artwork:",
+      err?.message || err,
+    );
+
+    return null;
+  }
+}
+
+/**
+ * Persists the resolved artworkId onto the album and its songs.
  */
 async function backfillAlbum(albumId, artworkId) {
-  if (!albumId || !artworkId) return;
+  if (!albumId || !artworkId) {
+    return;
+  }
 
   try {
     await applyArtworkToAlbum(albumId, artworkId);
   } catch (err) {
-    console.warn("[motif/artwork] failed to backfill album:", err.message);
+    console.warn(
+      "[motif/artwork] failed to backfill album:",
+      err?.message || err,
+    );
   }
 }
 
@@ -163,9 +250,17 @@ async function runPipeline(ctx) {
       backfillAlbum(albumId, cached.artworkId);
     }
 
-    return cached.artworkId
-      ? { artworkId: cached.artworkId }
-      : { artworkUrl: cached.artworkUrl };
+    if (cached.artworkId) {
+      return {
+        artworkId: cached.artworkId,
+      };
+    }
+
+    return cached.artworkUrl
+      ? {
+          artworkUrl: cached.artworkUrl,
+        }
+      : null;
   }
 
   if (!artist || !album) {
@@ -189,12 +284,34 @@ async function runProviders(ctx) {
         album,
       });
     } catch (err) {
-      console.warn("[motif/artwork] provider threw, skipping:", err.message);
+      console.warn(
+        "[motif/artwork] provider threw, skipping:",
+        err?.message || err,
+      );
 
       found = null;
     }
 
-    if (!found) continue;
+    if (!found) {
+      continue;
+    }
+
+    /*
+     * Embedded artwork may have been extracted while the network provider
+     * was running. Re-check the cache before allowing this online result
+     * to overwrite it.
+     */
+    const latestCache = await getAlbumArtworkCache(albumKey);
+
+    if (latestCache && !latestCache.failed && latestCache.artworkId) {
+      if (albumId) {
+        backfillAlbum(albumId, latestCache.artworkId);
+      }
+
+      return {
+        artworkId: latestCache.artworkId,
+      };
+    }
 
     let artworkId = null;
 
@@ -204,7 +321,7 @@ async function runProviders(ctx) {
       } catch (err) {
         console.warn(
           "[motif/artwork] failed to persist downloaded artwork:",
-          err.message,
+          err?.message || err,
         );
       }
     }
@@ -235,7 +352,13 @@ async function runProviders(ctx) {
 
     notifyLoaded(albumKey, album);
 
-    return artworkId ? { artworkId } : { artworkUrl: entry.artworkUrl };
+    return artworkId
+      ? {
+          artworkId,
+        }
+      : {
+          artworkUrl: entry.artworkUrl,
+        };
   }
 
   return cacheFailure(albumKey, artist, album);
@@ -262,16 +385,20 @@ async function cacheFailure(albumKey, artist, album) {
 }
 
 /*
- * Each notify* function records that the user has already been told
- * about an album even while a scan suppresses the visible toast.
+ * Each notification function remembers that the user has already been told
+ * about an album, even while a scan suppresses visible toasts.
  */
 
 function notifyFailure(albumKey, album) {
-  if (notifiedFailures.has(albumKey)) return;
+  if (notifiedFailures.has(albumKey)) {
+    return;
+  }
 
   notifiedFailures.add(albumKey);
 
-  if (isScanActive()) return;
+  if (isScanActive()) {
+    return;
+  }
 
   pushToast(
     album
@@ -284,11 +411,15 @@ function notifyFailure(albumKey, album) {
 }
 
 function notifySearching(albumKey, album) {
-  if (notifiedSearching.has(albumKey)) return;
+  if (notifiedSearching.has(albumKey)) {
+    return;
+  }
 
   notifiedSearching.add(albumKey);
 
-  if (isScanActive()) return;
+  if (isScanActive()) {
+    return;
+  }
 
   pushToast(
     album
@@ -302,11 +433,15 @@ function notifySearching(albumKey, album) {
 }
 
 function notifyLoaded(albumKey, album) {
-  if (notifiedLoaded.has(albumKey)) return;
+  if (notifiedLoaded.has(albumKey)) {
+    return;
+  }
 
   notifiedLoaded.add(albumKey);
 
-  if (isScanActive()) return;
+  if (isScanActive()) {
+    return;
+  }
 
   pushToast(album ? `Artwork loaded for "${album}"` : "Album artwork loaded", {
     type: "success",

@@ -8,7 +8,7 @@ const API_BASE = "https://lrclib.net/api";
 // to match this project's real name/version/homepage before shipping.
 const CLIENT_NAME = "Motif";
 const CLIENT_VERSION = "0.1.0";
-const CLIENT_HOMEPAGE = "https://github.com/REPLACE-ME/motif"; // TODO: real project URL
+const CLIENT_HOMEPAGE = "https://github.com/alejandroamarante/motif-music"; // TODO: real project URL
 
 const CLIENT_HEADERS = {
   "Lrclib-Client": `${CLIENT_NAME} v${CLIENT_VERSION} (${CLIENT_HOMEPAGE})`,

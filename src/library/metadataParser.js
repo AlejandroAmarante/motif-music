@@ -1,51 +1,65 @@
-import { parseBlob } from 'music-metadata';
-import { extractEmbeddedLyrics } from './lyrics.js';
+import { parseMetadataInWorker } from "./metadataWorkerPool.js";
+
+const DEBUG_METADATA_TIMING = false;
+
+function createEmptyMetadata() {
+  return {
+    title: null,
+    artist: null,
+    album: null,
+    albumArtist: null,
+    trackNumber: null,
+    discNumber: null,
+    genre: [],
+    year: null,
+    duration: 0,
+    bitrate: null,
+    sampleRate: null,
+    artworkBytes: null,
+    artworkMime: null,
+    embeddedLyrics: null,
+  };
+}
 
 /**
- * Parses a File into Motif's normalized tag shape. Falls back gracefully —
- * a file with unreadable/missing tags still becomes a playable song, just
- * with the filename as its title.
+ * Parses metadata through the persistent worker pool.
+ *
+ * The expensive music-metadata operation is no longer performed on the
+ * browser's main/UI thread.
+ *
+ * Embedded cover artwork is deliberately excluded from this pass.
+ * See artwork/embeddedArtwork.js.
  */
 export async function parseFileMetadata(file) {
+  const startedAt = typeof performance !== "undefined" ? performance.now() : 0;
+
   try {
-    const metadata = await parseBlob(file, { duration: true, skipCovers: false });
-    const { common, format } = metadata;
+    const result = await parseMetadataInWorker(file);
 
-    const picture = common.picture?.[0];
+    if (DEBUG_METADATA_TIMING) {
+      const totalMs =
+        typeof performance !== "undefined" ? performance.now() - startedAt : 0;
 
-    return {
-      title: common.title || null,
-      artist: common.artist || common.albumartist || null,
-      album: common.album || null,
-      albumArtist: common.albumartist || common.artist || null,
-      trackNumber: common.track?.no ?? null,
-      discNumber: common.disk?.no ?? null,
-      genre: common.genre || [],
-      year: common.year || null,
-      duration: format.duration || 0,
-      bitrate: format.bitrate ? Math.round(format.bitrate / 1000) : null, // kbps
-      sampleRate: format.sampleRate || null,
-      artworkBytes: picture ? picture.data : null,
-      artworkMime: picture ? picture.format : null,
-      embeddedLyrics: extractEmbeddedLyrics(common.lyrics)
-    };
+      console.debug("[motif/metadata]", {
+        file: file.name,
+        fileMB: Number((file.size / 1024 / 1024).toFixed(2)),
+        workerParseMs: result.parseMs,
+        mainThreadMs: Math.round(totalMs),
+        workerError: result.error || null,
+      });
+    }
+
+    if (result?.tags) {
+      return result.tags;
+    }
+
+    return createEmptyMetadata();
   } catch (err) {
-    console.warn(`[motif/metadata] failed to parse tags for ${file.name}:`, err.message);
-    return {
-      title: null,
-      artist: null,
-      album: null,
-      albumArtist: null,
-      trackNumber: null,
-      discNumber: null,
-      genre: [],
-      year: null,
-      duration: 0,
-      bitrate: null,
-      sampleRate: null,
-      artworkBytes: null,
-      artworkMime: null,
-      embeddedLyrics: null
-    };
+    console.warn(
+      `[motif/metadata] worker failed for ${file.name}:`,
+      err?.message || err,
+    );
+
+    return createEmptyMetadata();
   }
 }
