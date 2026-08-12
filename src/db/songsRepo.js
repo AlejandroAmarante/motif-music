@@ -1,4 +1,4 @@
-// src/db/songsRepo.js — full updated file (enrichSong removed, now dead after the batch rewrite; unused imports cleaned up)
+// src/db/songsRepo.js — full updated file (discovery now bulk-reads/batch-writes instead of one IndexedDB transaction per file; see getSongsMapForDir/seedPlaceholdersBatch/removeSongsBatch)
 import { getDb } from "./db.js";
 import { makeId, normalize } from "../utils/id.js";
 import { adjustArtistSongCount } from "./artistsRepo.js";
@@ -21,63 +21,89 @@ export async function countSongs() {
 }
 
 /**
- * Phase 1 of a two-phase scan (see src/library/scanner.js): inserts a
- * minimal, immediately-visible row for a brand-new file before any
- * tag/duration/artwork parsing has happened. `pending: 1` is what SongRow
- * reads to show the "still loading" treatment and disable playback until
- * the batched enrichment pass (src/db/batchEnrichRepo.js) fills in the
- * real data. Deliberately does NOT create Artist/Album records yet — we
- * don't know them from a filename alone — so that resolution, and the
- * song-count bookkeeping that goes with it, happens once, during
- * enrichment.
+ * Every song currently indexed under a directory, keyed by path — one
+ * IndexedDB read for the whole directory instead of a getByPath() round
+ * trip per file. This is what lets scanDirectory() do its new/changed/
+ * unchanged comparison entirely in memory: the existence check that used
+ * to cost one transaction per file during discovery now costs one
+ * transaction total, no matter how many files are in the folder. It also
+ * doubles as the source of truth for missing-file detection at the end of
+ * a scan (any path left in this map that the walk never visited), so the
+ * old separate getPathsForDir() call is gone too.
  */
-export async function seedPlaceholder({
-  path,
-  dirHandleId,
-  fileName,
-  format,
-  size,
-  lastModified,
-}) {
+export async function getSongsMapForDir(dirHandleId) {
   const db = await getDb();
-  const title = fileName.replace(/\.[^./]+$/, "");
-  const song = {
-    id: makeId("song"),
-    path,
-    dirHandleId,
-    fileName,
-    format,
-    size,
-    lastModified,
-    title,
-    titleLower: normalize(title),
-    artist: null,
-    artistId: null,
-    album: null,
-    albumId: null,
-    albumArtist: null,
-    trackNumber: null,
-    discNumber: null,
-    genre: [],
-    genreIds: [],
-    year: null,
-    duration: 0,
-    bitrate: null,
-    sampleRate: null,
-    artworkId: null,
-    dateAdded: Date.now(),
-    lastPlayedAt: null,
-    playCount: 0,
-    skipCount: 0,
-    favorite: 0,
-    rating: 0,
-    lyrics: null,
-    lyricsCheckedAt: null,
-    metadataSchemaVersion: METADATA_SCHEMA_VERSION,
-    pending: 1,
-  };
-  await db.put("songs", song);
-  return song;
+  const songs = await db.getAllFromIndex("songs", "byDirHandle", dirHandleId);
+  const map = new Map();
+  for (const song of songs) map.set(song.path, song);
+  return map;
+}
+
+/**
+ * Phase 1 of a two-phase scan (see src/library/scanner.js): inserts
+ * minimal, immediately-visible rows for brand-new files before any tag/
+ * duration/artwork parsing has happened, in ONE transaction for the whole
+ * batch rather than one transaction per file — the same reasoning as
+ * enrichSongsBatch's own doc comment, applied to discovery instead of
+ * enrichment. `pending: 1` is what SongRow reads to show the "still
+ * loading" treatment and disable playback until the batched enrichment
+ * pass (src/db/batchEnrichRepo.js) fills in the real data. Deliberately
+ * does NOT create Artist/Album records yet — we don't know them from a
+ * filename alone — so that resolution, and the song-count bookkeeping
+ * that goes with it, happens once, during enrichment.
+ *
+ * Returns the created records in the same order as `items`.
+ */
+export async function seedPlaceholdersBatch(items) {
+  if (!items.length) return [];
+  const db = await getDb();
+  const tx = db.transaction("songs", "readwrite");
+  const store = tx.objectStore("songs");
+
+  const songs = items.map(
+    ({ path, dirHandleId, fileName, format, size, lastModified }) => {
+      const title = fileName.replace(/\.[^./]+$/, "");
+      return {
+        id: makeId("song"),
+        path,
+        dirHandleId,
+        fileName,
+        format,
+        size,
+        lastModified,
+        title,
+        titleLower: normalize(title),
+        artist: null,
+        artistId: null,
+        album: null,
+        albumId: null,
+        albumArtist: null,
+        trackNumber: null,
+        discNumber: null,
+        genre: [],
+        genreIds: [],
+        year: null,
+        duration: 0,
+        bitrate: null,
+        sampleRate: null,
+        artworkId: null,
+        dateAdded: Date.now(),
+        lastPlayedAt: null,
+        playCount: 0,
+        skipCount: 0,
+        favorite: 0,
+        rating: 0,
+        lyrics: null,
+        lyricsCheckedAt: null,
+        metadataSchemaVersion: METADATA_SCHEMA_VERSION,
+        pending: 1,
+      };
+    },
+  );
+
+  for (const song of songs) await store.add(song);
+  await tx.done;
+  return songs;
 }
 
 /** Removes a song that scanning discovered is no longer on disk. */
@@ -105,6 +131,55 @@ async function _removeSongRecord(song) {
     if (song.albumId) await adjustAlbumSongCount(song.albumId, -1);
   }
   return song;
+}
+
+/**
+ * Batched version of removeByPath/removeById for scan-time cleanup of
+ * files that disappeared from disk. One transaction for every deletion
+ * AND every artist/album count adjustment, no matter how many songs are
+ * removed — and since the adjustments are collapsed by unique artist/
+ * album id first, deleting an entire 12-track album folder costs one
+ * artist update and one album update, not twelve of each.
+ */
+export async function removeSongsBatch(songs) {
+  if (!songs.length) return;
+  const db = await getDb();
+  const tx = db.transaction(["songs", "artists", "albums"], "readwrite");
+  const songsStore = tx.objectStore("songs");
+  const artistsStore = tx.objectStore("artists");
+  const albumsStore = tx.objectStore("albums");
+
+  const artistDeltas = new Map();
+  const albumDeltas = new Map();
+
+  for (const song of songs) {
+    await songsStore.delete(song.id);
+    if (song.pending) continue; // never counted, see _removeSongRecord's reasoning above
+    if (song.artistId)
+      artistDeltas.set(
+        song.artistId,
+        (artistDeltas.get(song.artistId) || 0) - 1,
+      );
+    if (song.albumId)
+      albumDeltas.set(song.albumId, (albumDeltas.get(song.albumId) || 0) - 1);
+  }
+
+  for (const [artistId, delta] of artistDeltas) {
+    const artist = await artistsStore.get(artistId);
+    if (artist) {
+      artist.songCount = Math.max(0, (artist.songCount || 0) + delta);
+      await artistsStore.put(artist);
+    }
+  }
+  for (const [albumId, delta] of albumDeltas) {
+    const album = await albumsStore.get(albumId);
+    if (album) {
+      album.songCount = Math.max(0, (album.songCount || 0) + delta);
+      await albumsStore.put(album);
+    }
+  }
+
+  await tx.done;
 }
 
 export async function markMissing(id, missing) {
@@ -137,12 +212,6 @@ export async function setLyrics(id, lyrics) {
   }
   await tx.done;
   return song;
-}
-
-export async function getPathsForDir(dirHandleId) {
-  const db = await getDb();
-  const songs = await db.getAllFromIndex("songs", "byDirHandle", dirHandleId);
-  return songs.map((s) => s.path);
 }
 
 /** Every song still flagged pending, across all folders — used to resume an interrupted scan on app load. See src/library/scanner.js's resumePendingEnrichment(). */

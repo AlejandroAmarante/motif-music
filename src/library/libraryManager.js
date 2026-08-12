@@ -6,6 +6,7 @@ import {
   ensurePermission,
 } from "../db/directoryHandlesRepo.js";
 import { scanDirectory } from "./scanner.js";
+import { createEnrichmentCaches } from "../db/batchEnrichRepo.js";
 import { getMotifFolderId, setMotifFolderId } from "../setup/setupState.js";
 
 export const MOTIF_FOLDER_NAME = "motif-music";
@@ -108,7 +109,14 @@ export async function removeLibraryFolder(id) {
   return removeDirectoryHandle(id);
 }
 
-/** Scans every registered root, re-requesting permission per folder as needed. */
+/**
+ * Scans every registered root, re-requesting permission per folder as
+ * needed. One enrichment-cache set (see createEnrichmentCaches) is
+ * created here and shared across every folder in this run, so an artist
+ * or album that spans more than one connected folder — or more than one
+ * batch within a folder — resolves against IndexedDB once per scan, not
+ * once per batch.
+ */
 export async function scanAllFolders({
   onProgress,
   onFolderStart,
@@ -122,6 +130,7 @@ export async function scanAllFolders({
     removed: 0,
     errors: 0,
   };
+  const sharedCaches = createEnrichmentCaches();
 
   for (const folder of folders) {
     onFolderStart?.(folder);
@@ -133,6 +142,7 @@ export async function scanAllFolders({
 
     const stats = await scanDirectory(folder, {
       onProgress: (progress) => onProgress?.(folder, progress),
+      sharedCaches,
     });
 
     for (const key of Object.keys(overall)) overall[key] += stats[key] || 0;

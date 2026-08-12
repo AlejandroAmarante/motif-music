@@ -21,6 +21,37 @@ export async function hashArtworkBytes(bytes) {
     .join("");
 }
 
+/**
+ * Wraps hashArtworkBytes with a same-folder memoization heuristic. Every
+ * track on an album typically embeds an identical copy of its cover art,
+ * so hashing each track's copy independently during a scan is redundant
+ * CPU work multiplied by the album's track count — a 12-track album
+ * would otherwise hash the same bytes 12 times.
+ *
+ * This is deliberately a cheap heuristic (folder + byte length), not a
+ * byte-for-byte compare: two genuinely different images landing in the
+ * same folder with the exact same byte length doesn't happen for real
+ * album art in practice, and a false-positive here would only mean one
+ * track's artwork briefly shares another (near-identical) cover in the
+ * same folder before any per-track difference is ever visible — not a
+ * data-loss risk, since the actual bytes stored come from resolveArtwork
+ * deduping by hash, and this only decides which hash gets computed.
+ *
+ * Scope one of these per scan (see scanner.js) — it's cheap, and a fresh
+ * one per scan avoids stale folder->hash entries lingering indefinitely.
+ */
+export function createArtworkHashCache() {
+  const lastByFolder = new Map(); // folderKey -> { byteLength, hash }
+  return async function hashCached(folderKey, bytes) {
+    if (!bytes || !bytes.byteLength) return null;
+    const cached = lastByFolder.get(folderKey);
+    if (cached && cached.byteLength === bytes.byteLength) return cached.hash;
+    const hash = await hashArtworkBytes(bytes);
+    lastByFolder.set(folderKey, { byteLength: bytes.byteLength, hash });
+    return hash;
+  };
+}
+
 export async function storeArtwork(bytes, mimeType) {
   const hash = await hashArtworkBytes(bytes);
 

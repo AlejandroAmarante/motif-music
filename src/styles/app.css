@@ -158,7 +158,6 @@
   background: var(--bg);
   padding: calc(var(--safe-top) + 8px) 22px calc(var(--safe-bottom) + 24px);
   --marquee-fade-bg: var(--bg);
-
 }
 .now-playing__handle-zone {
   display: flex;
@@ -749,11 +748,46 @@
 }
 .folder-picker__progress {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
   font-size: 14.5px;
   color: var(--accent);
-  padding: 6px 0;
+  padding: 10px 0 6px;
+}
+.folder-picker__progress-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-strong);
+  overflow: hidden;
+}
+.folder-picker__progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width var(--duration-base) var(--ease-standard);
+}
+/* Discovery has no reliable total to show a real percentage against (see
+   scanner.js) — a sweeping fill communicates "still working" honestly,
+   rather than a determinate bar implying a precision we don't have. */
+.folder-picker__progress-bar--indeterminate .folder-picker__progress-fill {
+  width: 35%;
+  transition: none;
+  animation: folder-picker-indeterminate 1.3s ease-in-out infinite;
+}
+@keyframes folder-picker-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(340%);
+  }
+}
+.folder-picker__progress-detail {
+  font-size: 13px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .folder-picker__count {
   font-size: 14px;

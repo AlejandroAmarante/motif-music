@@ -1,7 +1,32 @@
-// src/db/batchEnrichRepo.js — NEW
+// src/db/batchEnrichRepo.js — accepts an optional shared cache set so a scan spanning many batches (or many folders) doesn't repeat an index lookup for an artist/album/genre it already resolved earlier in the same scan
 import { getDb } from "./db.js";
 import { makeId, normalize } from "../utils/id.js";
 import { METADATA_SCHEMA_VERSION } from "./schema.js";
+
+/**
+ * Creates a fresh set of the four resolution caches enrichSongsBatch()
+ * uses. Callers that process many batches in one logical scan (see
+ * scanner.js) should create ONE of these up front and pass it to every
+ * enrichSongsBatch() call in that scan, instead of letting each batch
+ * start from empty caches. Sharing them is safe: each call still tracks
+ * its own touched-records set and commits those in its own transaction
+ * (see touchedArtists/touchedAlbums below), so a cached record's counts
+ * keep accumulating correctly across batches even though the object
+ * reference is reused — the alternative (fresh caches per batch) just
+ * means re-querying an index for an artist/album/genre this same scan
+ * already looked up. The payoff scales with how much the library shares
+ * artists and albums across batch boundaries, which for a real library
+ * (an artist with several albums, various-artists compilations, etc.) is
+ * the common case, not the exception.
+ */
+export function createEnrichmentCaches() {
+  return {
+    artistCache: new Map(),
+    albumCache: new Map(),
+    genreCache: new Map(),
+    artworkCache: new Map(),
+  };
+}
 
 /**
  * The batched write path behind a scan's enrichment phase (see
@@ -28,12 +53,18 @@ import { METADATA_SCHEMA_VERSION } from "./schema.js";
  * noted there — nothing in here awaits anything but this transaction's
  * own requests once it's open.
  *
+ * `sharedCaches`: optional, from createEnrichmentCaches() above. Pass the
+ * same object across every batch in a scan to let resolution persist
+ * across batch boundaries instead of resetting every WRITE_BATCH_SIZE
+ * songs. Omit it (or pass null) for a one-off batch that should use
+ * fresh, call-scoped caches, same as before.
+ *
  * Returns one result per input item, same order: either
  * { ok: true, song, isNew } or { ok: false, path, error }. A single bad
  * item is caught and skipped without losing the rest of the batch's
  * writes.
  */
-export async function enrichSongsBatch(items) {
+export async function enrichSongsBatch(items, sharedCaches = null) {
   if (!items.length) return [];
 
   const db = await getDb();
@@ -47,13 +78,14 @@ export async function enrichSongsBatch(items) {
   const genresStore = tx.objectStore("genres");
   const artworkStore = tx.objectStore("cachedArtwork");
 
-  // Scoped to this call — every song in the batch that shares an
-  // artist/album/genre/artwork resolves against these instead of hitting
-  // the index again.
-  const artistCache = new Map(); // nameLower -> live artist record
-  const albumCache = new Map(); // `${nameLower}::${artistId}` -> live album record
-  const genreCache = new Map(); // nameLower -> live genre record
-  const artworkCache = new Map(); // hash -> artworkId
+  // Scoped to this call by default, or shared across the whole scan when
+  // sharedCaches is provided — every song in the batch (or the scan) that
+  // shares an artist/album/genre/artwork resolves against these instead
+  // of hitting the index again.
+  const artistCache = sharedCaches?.artistCache ?? new Map(); // nameLower -> live artist record
+  const albumCache = sharedCaches?.albumCache ?? new Map(); // `${nameLower}::${artistId}` -> live album record
+  const genreCache = sharedCaches?.genreCache ?? new Map(); // nameLower -> live genre record
+  const artworkCache = sharedCaches?.artworkCache ?? new Map(); // hash -> artworkId
 
   // Records mutated in place as counts change through the loop below,
   // written once each at the very end rather than after every song.
