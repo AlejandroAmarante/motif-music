@@ -1,3 +1,4 @@
+// src/library/scanner.js
 import { isSupportedFile, extensionOf } from "./formats.js";
 import { parseFileMetadata } from "./metadataParser.js";
 import { mergeLyrics } from "./lyrics.js";
@@ -23,43 +24,41 @@ import { notifySongUpdated } from "../state/songUpdateBus.js";
 import { beginScanActivity, endScanActivity } from "./scanState.js";
 
 /*
- * This limits how many parse requests the scanner puts into the metadata
- * worker pool at once.
- *
- * The worker pool itself is also bounded based on hardwareConcurrency, so
- * this is intentionally not aggressive. Four queued parser jobs is enough
- * to keep the workers fed without creating a large number of pending File
- * objects on the main thread.
+ * This limits how many parse requests the scanner has in flight at once.
+ * The metadata worker pool has its own worker count, so this is the number
+ * of jobs we allow the scanner to have pending against that pool.
  */
 const PARSE_CONCURRENCY = 4;
 
 /*
- * Parsed songs are persisted in batches. This is separate from metadata
- * parsing concurrency.
+ * How many parsed songs get resolved/written per IndexedDB transaction.
  */
 const WRITE_BATCH_SIZE = 40;
 
 /*
- * New-file placeholder writes during discovery.
+ * How many new-file placeholders are written per discovery transaction.
  */
 const DISCOVERY_BATCH_SIZE = 80;
 
 /*
- * Also flush discovery after a short amount of time so small libraries do not
- * wait for the full discovery batch before their rows appear.
+ * Flush discovery periodically even when the batch hasn't filled.
  */
 const DISCOVERY_FLUSH_INTERVAL_MS = 400;
 
 /*
- * Don't push one React state update for every file.
+ * Prevent excessive React/UI progress updates.
  */
 const PROGRESS_THROTTLE_MS = 150;
 
-/**
- * Recursively walks a directory handle and yields supported audio files.
+/*
+ * Temporary performance diagnostics.
  *
- * parentHandle is retained so a sibling .lrc file can be checked without
- * walking the directory tree again.
+ * Set this to false after we've identified the bottleneck.
+ */
+const DEBUG_SCAN_TIMING = true;
+
+/**
+ * Recursively walks a directory handle and yields every supported audio file.
  */
 async function* walk(dirHandle, relativePath = "") {
   for await (const [name, handle] of dirHandle.entries()) {
@@ -78,7 +77,7 @@ async function* walk(dirHandle, relativePath = "") {
 }
 
 /**
- * Reads a sidecar .lrc file next to a track.
+ * Reads a sidecar .lrc file next to the audio file.
  */
 async function readSidecarLrc(parentHandle, fileName) {
   const lrcName = fileName.replace(/\.[^./]+$/, "") + ".lrc";
@@ -96,9 +95,6 @@ async function readSidecarLrc(parentHandle, fileName) {
 
 /**
  * Trailing-edge throttle.
- *
- * The most recent arguments always win, so the UI cannot get stuck with an
- * older progress state.
  */
 function makeThrottled(fn, minIntervalMs) {
   let last = 0;
@@ -141,7 +137,7 @@ function makeThrottledNotifier(minIntervalMs = 400) {
 }
 
 /**
- * Best-effort remaining-time estimate.
+ * Best-effort ETA from the current processing rate.
  */
 function estimateRemainingMs(done, total, startedAt) {
   if (done <= 0 || done >= total) {
@@ -162,15 +158,10 @@ function estimateRemainingMs(done, total, startedAt) {
 /**
  * Phase 2:
  *
- * 1. Metadata parsing happens concurrently through the metadata worker pool.
- * 2. Parsed songs are written to IndexedDB in batches.
- * 3. Embedded artwork extraction happens independently of the metadata write.
- * 4. Artwork is only associated with an album AFTER the database returns the
- *    real albumId for that song.
- *
- * That last point is important. The old implementation could begin artwork
- * work before the corresponding album existed in IndexedDB, creating a race
- * between artwork extraction and album creation.
+ * - metadata parsing goes through the worker pool
+ * - IndexedDB writes are batched
+ * - embedded artwork is extracted independently
+ * - artwork isn't registered until the actual albumId is available
  */
 async function enrichQueued(
   queue,
@@ -201,31 +192,12 @@ async function enrichQueued(
 
   const pendingWrite = [];
 
-  /*
-   * This map exists only until the corresponding write batch finishes.
-   *
-   * path -> {
-   *   artworkKey,
-   *   artworkPromise
-   * }
-   *
-   * We retain the promise itself rather than its result so artwork extraction
-   * can continue independently while IndexedDB is writing the song.
-   */
   const embeddedArtworkByPath = new Map();
 
-  /*
-   * Prevents the same album from being registered multiple times when
-   * several tracks from the album complete in the same or different batches.
-   */
   const registeredEmbeddedAlbums = new Set();
 
   let writeChain = Promise.resolve();
 
-  /**
-   * Queues a background registration of embedded artwork after a database
-   * batch has produced the actual albumId.
-   */
   function registerArtworkForResult(result, artworkInfo) {
     if (!result?.ok || !result.song || !artworkInfo) {
       return;
@@ -252,10 +224,8 @@ async function enrichQueued(
     registeredEmbeddedAlbums.add(registrationKey);
 
     /*
-     * Deliberately do not await this.
-     *
-     * Artwork is secondary to metadata. A slow cover extraction must never
-     * hold up the next IndexedDB batch.
+     * Artwork remains background work. It must not hold up the metadata
+     * pipeline or the IndexedDB write queue.
      */
     artworkPromise
       .then((artwork) => {
@@ -309,11 +279,6 @@ async function enrichQueued(
 
             notifySongUpdated(result.song);
 
-            /*
-             * The chunk item is the exact item that
-             * produced this result. This avoids looking up
-             * artwork through stale global state.
-             */
             const sourceItem = chunk[index];
 
             const artworkInfo = embeddedArtworkByPath.get(sourceItem.path);
@@ -353,13 +318,24 @@ async function enrichQueued(
     try {
       /*
        * This now runs through metadataWorkerPool.js.
-       *
-       * The main thread only waits for the worker response; the
-       * music-metadata parsing itself happens off-thread.
        */
+      const metadataStartedAt = performance.now();
+
       const tags = await parseFileMetadata(file);
 
+      const metadataWaitMs = performance.now() - metadataStartedAt;
+
+      /*
+       * Read the sidecar after metadata parsing.
+       *
+       * We time this separately because on mobile, directory/file
+       * access may be more expensive than expected.
+       */
+      const lrcStartedAt = performance.now();
+
       const lrcText = await readSidecarLrc(parentHandle, file.name);
+
+      const lrcMs = performance.now() - lrcStartedAt;
 
       tags.lyrics = mergeLyrics({
         lrcText,
@@ -367,14 +343,7 @@ async function enrichQueued(
       });
 
       /*
-       * Embedded artwork is started independently.
-       *
-       * The resolver deduplicates this by artist/album/year, so
-       * multiple tracks from the same album share one extraction.
-       *
-       * IMPORTANT:
-       * We only retain the promise here. The actual albumId isn't
-       * known until enrichSongsBatch() has created/resolved the song.
+       * Start embedded artwork extraction independently.
        */
       let artworkInfo = null;
 
@@ -395,16 +364,30 @@ async function enrichQueued(
           artworkKey,
           artworkPromise,
         };
+
+        embeddedArtworkByPath.set(path, artworkInfo);
       }
 
       /*
-       * Store the artwork promise alongside this exact song path.
+       * DEBUG TIMING
        *
-       * It is not necessary to wait for artwork before inserting the
-       * song into IndexedDB.
+       * metadataWaitMs is intentionally measured from the main
+       * thread. It includes time waiting for an available worker.
+       *
+       * If worker parsing itself reports ~100 ms but this says
+       * 1500 ms, the problem is worker queue/file transfer pressure.
        */
-      if (artworkInfo) {
-        embeddedArtworkByPath.set(path, artworkInfo);
+      if (DEBUG_SCAN_TIMING) {
+        console.debug("[motif/scan:metadata]", {
+          file: file.name,
+          path,
+          sizeMB: Number((file.size / 1024 / 1024).toFixed(2)),
+          metadataWaitMs: Math.round(metadataWaitMs),
+          lrcMs: Math.round(lrcMs),
+          artist: tags.artist || null,
+          title: tags.title || null,
+          album: tags.album || null,
+        });
       }
 
       emitProgress?.({
@@ -436,21 +419,14 @@ async function enrichQueued(
     }
 
     /*
-     * Do not await the write chain here. Parsing workers should stay
-     * busy while IndexedDB drains in the background.
+     * Fire and forget. Parsing should continue while the serialized
+     * IndexedDB write chain drains in batches.
      */
     drain(false);
   });
 
-  /*
-   * Flush the final partial batch.
-   */
   await drain(true);
 
-  /*
-   * If a malformed/failed batch somehow left artwork entries behind,
-   * don't allow them to live forever in the scan-scoped map.
-   */
   embeddedArtworkByPath.clear();
 
   emitProgress?.cancel();
@@ -461,13 +437,13 @@ async function enrichQueued(
  *
  * 1. Discovery
  * 2. Metadata/enrichment
- *
- * Embedded artwork runs independently during phase 2.
  */
 export async function scanDirectory(
   dirHandleRecord,
   { onProgress, sharedCaches } = {},
 ) {
+  const scanStartedAt = performance.now();
+
   beginScanActivity();
 
   try {
@@ -480,9 +456,19 @@ export async function scanDirectory(
       : null;
 
     /*
-     * One bulk IndexedDB read for the directory.
+     * Bulk IndexedDB lookup.
      */
+    const existingReadStartedAt = performance.now();
+
     const existingByPath = await getSongsMapForDir(dirHandleId);
+
+    if (DEBUG_SCAN_TIMING) {
+      console.debug("[motif/scan:database]", {
+        operation: "getSongsMapForDir",
+        ms: Math.round(performance.now() - existingReadStartedAt),
+        existingSongs: existingByPath.size,
+      });
+    }
 
     const stillPresent = new Set();
 
@@ -519,6 +505,8 @@ export async function scanDirectory(
 
       lastFlush = Date.now();
 
+      const writeStartedAt = performance.now();
+
       await seedPlaceholdersBatch(
         batch.map(
           ({
@@ -539,6 +527,14 @@ export async function scanDirectory(
         ),
       );
 
+      if (DEBUG_SCAN_TIMING) {
+        console.debug("[motif/scan:database]", {
+          operation: "seedPlaceholdersBatch",
+          count: batch.length,
+          ms: Math.round(performance.now() - writeStartedAt),
+        });
+      }
+
       for (const item of batch) {
         toEnrich.push({
           parentHandle: item.parentHandle,
@@ -553,31 +549,67 @@ export async function scanDirectory(
 
     let i = 0;
 
+    /*
+     * Discovery timing is split into:
+     *
+     * - directory iteration delay
+     * - getFile() duration
+     *
+     * We intentionally do NOT include metadata parsing here.
+     */
+    let previousEntryAt = performance.now();
+
     for await (const { fileHandle, parentHandle, path } of walk(handle)) {
+      const entryArrivedAt = performance.now();
+
       i += 1;
 
       stillPresent.add(path);
 
+      let file = null;
+
       try {
         /*
-         * getFile() here is cheap. We're obtaining a File object and
-         * its metadata, not asking the browser to read the whole audio
-         * file.
+         * This is the key measurement.
+         *
+         * If this number is high on mobile, we know File System Access
+         * is contributing materially to the scan time.
          */
-        const file = await fileHandle.getFile();
+        const getFileStartedAt = performance.now();
+
+        file = await fileHandle.getFile();
+
+        const getFileMs = performance.now() - getFileStartedAt;
+
+        const enumerationGapMs = entryArrivedAt - previousEntryAt;
+
+        previousEntryAt = performance.now();
 
         const existing = existingByPath.get(path);
 
-        if (
+        const unchanged =
           existing &&
           !existing.pending &&
           existing.size === file.size &&
-          existing.lastModified === file.lastModified
-        ) {
+          existing.lastModified === file.lastModified;
+
+        if (DEBUG_SCAN_TIMING) {
+          console.debug("[motif/scan:filesystem]", {
+            index: i,
+            path,
+            getFileMs: Math.round(getFileMs),
+            enumerationGapMs: Math.round(enumerationGapMs),
+            sizeMB: Number((file.size / 1024 / 1024).toFixed(2)),
+            lastModified: file.lastModified,
+            unchanged: Boolean(unchanged),
+          });
+        }
+
+        if (unchanged) {
           stats.unchanged += 1;
         } else if (existing) {
           /*
-           * Changed file or incomplete previous scan.
+           * Changed file or unfinished previous scan.
            */
           toEnrich.push({
             parentHandle,
@@ -618,22 +650,18 @@ export async function scanDirectory(
       });
 
       /*
-       * Yield periodically so a very large library cannot monopolize
-       * the main thread during directory enumeration.
+       * Yield to the browser every 25 entries so directory enumeration
+       * itself cannot monopolize the main thread.
        */
       if (i % 25 === 0) {
         await new Promise((resolve) => setTimeout(resolve, 0));
       }
     }
 
-    /*
-     * Flush any final new-file placeholders.
-     */
     await flushPlaceholders(true);
 
     /*
-     * Missing-file detection is now entirely in memory because
-     * existingByPath was fetched at the beginning of the scan.
+     * Missing-file detection is an in-memory diff.
      */
     const missing = [];
 
@@ -643,11 +671,23 @@ export async function scanDirectory(
       }
     }
 
-    if (missing.length) {
-      await removeSongsBatch(missing);
-    }
+    let removed = 0;
 
-    const removed = missing.length;
+    if (missing.length) {
+      const removeStartedAt = performance.now();
+
+      await removeSongsBatch(missing);
+
+      removed = missing.length;
+
+      if (DEBUG_SCAN_TIMING) {
+        console.debug("[motif/scan:database]", {
+          operation: "removeSongsBatch",
+          count: missing.length,
+          ms: Math.round(performance.now() - removeStartedAt),
+        });
+      }
+    }
 
     notify();
 
@@ -660,19 +700,14 @@ export async function scanDirectory(
     };
 
     /*
-     * One resolver for the entire scan.
-     *
-     * This is important because it allows:
-     *
-     *   Track 1
-     *   Track 2
-     *   Track 3
-     *
-     * from the same album to share the same embedded-art extraction.
+     * One resolver for the entire scan means tracks belonging to the same
+     * album share one embedded-artwork extraction.
      */
     const embeddedArtworkResolver = createEmbeddedArtworkResolver({
       concurrency: 1,
     });
+
+    const enrichmentStartedAt = performance.now();
 
     await enrichQueued(toEnrich, {
       onProgress: emitProgress,
@@ -682,11 +717,26 @@ export async function scanDirectory(
       embeddedArtworkResolver,
     });
 
+    /*
+     * Because artwork extraction is intentionally background work, this
+     * timing does NOT include artwork completion.
+     */
+    if (DEBUG_SCAN_TIMING) {
+      console.debug("[motif/scan:summary]", {
+        totalScanMs: Math.round(performance.now() - scanStartedAt),
+        enrichmentMs: Math.round(performance.now() - enrichmentStartedAt),
+        filesDiscovered: stats.scanned,
+        filesUnchanged: stats.unchanged,
+        filesChanged: stats.changed,
+        filesNew: stats.seeded,
+        filesEnriched: toEnrich.length,
+        filesRemoved: removed,
+        errors: totalStats.errors,
+      });
+    }
+
     emitProgress?.cancel();
 
-    /*
-     * Final authoritative UI/library update.
-     */
     notifyLibraryChanged();
 
     onProgress?.({
@@ -699,14 +749,22 @@ export async function scanDirectory(
     return totalStats;
   } finally {
     endScanActivity();
+
+    if (DEBUG_SCAN_TIMING) {
+      console.debug("[motif/scan:summary]", {
+        event: "scan finished",
+      });
+    }
   }
 }
 
 /**
- * Finishes enrichment for any songs that remained pending after an interrupted
+ * Finishes enrichment for songs that remained pending after an interrupted
  * scan.
  */
 export async function resumePendingEnrichment({ onProgress } = {}) {
+  const scanStartedAt = performance.now();
+
   beginScanActivity();
 
   try {
@@ -762,6 +820,14 @@ export async function resumePendingEnrichment({ onProgress } = {}) {
       sharedCaches: createEnrichmentCaches(),
       embeddedArtworkResolver,
     });
+
+    if (DEBUG_SCAN_TIMING) {
+      console.debug("[motif/scan:summary]", {
+        event: "pending enrichment finished",
+        totalMs: Math.round(performance.now() - scanStartedAt),
+        pendingCount: pending.length,
+      });
+    }
 
     notifyLibraryChanged();
 
