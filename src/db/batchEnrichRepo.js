@@ -1,3 +1,4 @@
+// src/db/batchEnrichRepo.js — full updated file (lyrics now carries over from `existing` instead of `tags.lyrics`, since the scan no longer produces that field at all)
 // src/db/batchEnrichRepo.js — accepts an optional shared cache set so a scan spanning many batches (or many folders) doesn't repeat an index lookup for an artist/album/genre it already resolved earlier in the same scan
 import { getDb } from "./db.js";
 import { makeId, normalize } from "../utils/id.js";
@@ -266,7 +267,11 @@ export async function enrichSongsBatch(items, sharedCaches = null) {
         skipCount: existing?.skipCount ?? 0,
         favorite: existing?.favorite ?? 0,
         rating: existing?.rating ?? 0,
-        lyrics: tags.lyrics ?? null,
+        // The scan never resolves lyrics (see lyricsResolver.js — that's
+        // now a lazy, on-demand lookup triggered only from the Lyrics
+        // view), so a re-enriched song must carry its previously-resolved
+        // value forward rather than being reset to null on every rescan.
+        lyrics: existing?.lyrics ?? null,
         lyricsCheckedAt: existing?.lyricsCheckedAt ?? null,
         metadataSchemaVersion: METADATA_SCHEMA_VERSION,
         pending: 0,

@@ -1,5 +1,6 @@
-import { parseBlob } from "music-metadata";
+// src/library/metadataWorker.js — full updated file (parses via parseAudioFile; re-integrates embedded artwork; no lyric work)
 import { extractEmbeddedLyrics } from "./lyrics.js";
+import { parseAudioFile } from "./parseAudioFile.js";
 
 function createEmptyMetadata() {
   return {
@@ -31,19 +32,29 @@ self.onmessage = async (event) => {
 
   try {
     /*
-     * This is intentionally the fast metadata pass.
+     * See parseAudioFile.js for why this reads the whole file once
+     * instead of going through parseBlob's chunked Blob reads — that
+     * switch is the actual fix for the Android metadata-parsing stall.
      *
-     * Embedded artwork is handled separately, so music-metadata does not
-     * need to extract and materialize cover images for every track.
+     * skipCovers is false again: embedded artwork is extracted from this
+     * SAME parse below, so re-enabling it costs nothing extra — no second
+     * read or second parse of the file (see scanner.js / embeddedArtwork.js,
+     * which used to do exactly that as a separate main-thread pass).
      */
-    const metadata = await parseBlob(file, {
+    const metadata = await parseAudioFile(file, {
       duration: false,
-      skipCovers: true,
+      skipCovers: false,
     });
 
     const { common, format } = metadata;
 
     const embeddedLyrics = extractEmbeddedLyrics(common.lyrics);
+
+    const picture = common.picture?.[0];
+    const artworkBytes = picture?.data?.byteLength ? picture.data : null;
+    const artworkMime = artworkBytes
+      ? picture.format || "application/octet-stream"
+      : null;
 
     const result = {
       title: common.title || null,
@@ -58,22 +69,28 @@ self.onmessage = async (event) => {
       bitrate: format.bitrate ? Math.round(format.bitrate / 1000) : null,
       sampleRate: format.sampleRate || null,
 
-      /*
-       * Deliberately empty. Cover extraction happens separately.
-       */
-      artworkBytes: null,
-      artworkMime: null,
+      artworkBytes,
+      artworkMime,
 
       embeddedLyrics,
     };
 
-    self.postMessage({
-      type: "result",
-      jobId,
-      ok: true,
-      tags: result,
-      parseMs: Math.round(performance.now() - startedAt),
-    });
+    // Transfer the picture bytes' backing buffer instead of structured-
+    // cloning (copying) it back to the main thread — cheap to do, and
+    // avoids doubling memory for whatever the embedded cover happens to
+    // weigh.
+    const transferList = artworkBytes ? [artworkBytes.buffer] : [];
+
+    self.postMessage(
+      {
+        type: "result",
+        jobId,
+        ok: true,
+        tags: result,
+        parseMs: Math.round(performance.now() - startedAt),
+      },
+      transferList,
+    );
   } catch (err) {
     /*
      * A bad file should never kill a worker or the scan.

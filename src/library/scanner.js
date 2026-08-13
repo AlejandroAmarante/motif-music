@@ -1,14 +1,10 @@
-// src/library/scanner.js
+// src/library/scanner.js — full updated file (no lyric work; embedded artwork sourced from the single worker parse, hashed inline instead of re-parsed)
 import { isSupportedFile, extensionOf } from "./formats.js";
 import { parseFileMetadata } from "./metadataParser.js";
-import { mergeLyrics } from "./lyrics.js";
 import { resolveFileHandles } from "./resolveFile.js";
 import { mapWithConcurrency } from "./concurrency.js";
-import {
-  createEmbeddedArtworkResolver,
-  makeEmbeddedArtworkKey,
-} from "../artwork/embeddedArtwork.js";
-import { registerEmbeddedArtwork } from "../artwork/artworkManager.js";
+import { makeEmbeddedArtworkKey } from "../artwork/embeddedArtwork.js";
+import { createArtworkHashCache } from "../db/artworkRepo.js";
 import {
   enrichSongsBatch,
   createEnrichmentCaches,
@@ -53,7 +49,8 @@ const PROGRESS_THROTTLE_MS = 150;
 /*
  * Temporary performance diagnostics.
  *
- * Set this to false after we've identified the bottleneck.
+ * Set this to false once the Android metadata-parsing fix has been
+ * confirmed in the field.
  */
 const DEBUG_SCAN_TIMING = true;
 
@@ -73,23 +70,6 @@ async function* walk(dirHandle, relativePath = "") {
         path,
       };
     }
-  }
-}
-
-/**
- * Reads a sidecar .lrc file next to the audio file.
- */
-async function readSidecarLrc(parentHandle, fileName) {
-  const lrcName = fileName.replace(/\.[^./]+$/, "") + ".lrc";
-
-  try {
-    const lrcHandle = await parentHandle.getFileHandle(lrcName);
-
-    const lrcFile = await lrcHandle.getFile();
-
-    return await lrcFile.text();
-  } catch {
-    return null;
   }
 }
 
@@ -158,20 +138,22 @@ function estimateRemainingMs(done, total, startedAt) {
 /**
  * Phase 2:
  *
- * - metadata parsing goes through the worker pool
+ * - metadata parsing goes through the worker pool (see metadataWorker.js /
+ *   parseAudioFile.js for the Android performance fix)
  * - IndexedDB writes are batched
- * - embedded artwork is extracted independently
- * - artwork isn't registered until the actual albumId is available
+ * - embedded artwork comes straight out of the same worker parse as the
+ *   rest of the tags — metadataWorker.js no longer skips covers, so there
+ *   is no second read/parse of the file to get artwork. The only work left
+ *   to do here is hash the bytes, since crypto.subtle can't be awaited
+ *   inside batchEnrichRepo's open IDB transaction; hashArtworkCached
+ *   memoizes that per album so a whole album's worth of identical embedded
+ *   covers only gets hashed once.
+ * - lyrics are never touched here at all — see lyricsResolver.js, which is
+ *   only invoked lazily when the user opens the Lyrics view for a song.
  */
 async function enrichQueued(
   queue,
-  {
-    onProgress,
-    totalStats,
-    notify,
-    sharedCaches,
-    embeddedArtworkResolver,
-  } = {},
+  { onProgress, totalStats, notify, sharedCaches, hashArtworkCached } = {},
 ) {
   const total = queue.length;
 
@@ -192,61 +174,7 @@ async function enrichQueued(
 
   const pendingWrite = [];
 
-  const embeddedArtworkByPath = new Map();
-
-  const registeredEmbeddedAlbums = new Set();
-
   let writeChain = Promise.resolve();
-
-  function registerArtworkForResult(result, artworkInfo) {
-    if (!result?.ok || !result.song || !artworkInfo) {
-      return;
-    }
-
-    const albumId = result.song.albumId;
-
-    if (!albumId) {
-      return;
-    }
-
-    const { artworkKey, artworkPromise } = artworkInfo;
-
-    if (!artworkKey || !artworkPromise) {
-      return;
-    }
-
-    const registrationKey = `${artworkKey}|${albumId}`;
-
-    if (registeredEmbeddedAlbums.has(registrationKey)) {
-      return;
-    }
-
-    registeredEmbeddedAlbums.add(registrationKey);
-
-    /*
-     * Artwork remains background work. It must not hold up the metadata
-     * pipeline or the IndexedDB write queue.
-     */
-    artworkPromise
-      .then((artwork) => {
-        if (!artwork?.artworkId) {
-          return null;
-        }
-
-        return registerEmbeddedArtwork({
-          albumId,
-          artist: result.song.albumArtist || result.song.artist || null,
-          album: result.song.album || null,
-          artworkId: artwork.artworkId,
-        });
-      })
-      .catch((err) => {
-        console.warn(
-          "[motif/scanner] failed to register embedded artwork:",
-          err?.message || err,
-        );
-      });
-  }
 
   function drain(force) {
     writeChain = writeChain.then(async () => {
@@ -261,9 +189,7 @@ async function enrichQueued(
         try {
           const results = await enrichSongsBatch(chunk, sharedCaches);
 
-          for (let index = 0; index < results.length; index += 1) {
-            const result = results[index];
-
+          for (const result of results) {
             if (!result.ok) {
               totalStats.errors += 1;
 
@@ -278,14 +204,6 @@ async function enrichQueued(
             totalStats[result.isNew ? "created" : "updated"] += 1;
 
             notifySongUpdated(result.song);
-
-            const sourceItem = chunk[index];
-
-            const artworkInfo = embeddedArtworkByPath.get(sourceItem.path);
-
-            registerArtworkForResult(result, artworkInfo);
-
-            embeddedArtworkByPath.delete(sourceItem.path);
           }
         } catch (err) {
           totalStats.errors += chunk.length;
@@ -313,7 +231,7 @@ async function enrichQueued(
   }
 
   await mapWithConcurrency(queue, PARSE_CONCURRENCY, async (item) => {
-    const { parentHandle, path, file, dirHandleId } = item;
+    const { path, file, dirHandleId } = item;
 
     try {
       /*
@@ -326,47 +244,23 @@ async function enrichQueued(
       const metadataWaitMs = performance.now() - metadataStartedAt;
 
       /*
-       * Read the sidecar after metadata parsing.
-       *
-       * We time this separately because on mobile, directory/file
-       * access may be more expensive than expected.
+       * Embedded artwork (if any) is already sitting in tags.artworkBytes
+       * from the parse above — no extra read. All that's left is hashing
+       * it, memoized per album so an album's worth of identical covers
+       * only costs one crypto.subtle.digest call, not one per track.
        */
-      const lrcStartedAt = performance.now();
+      let artworkHash = null;
 
-      // const lrcText = await readSidecarLrc(parentHandle, file.name);
+      if (tags.artworkBytes) {
+        const artworkKey =
+          makeEmbeddedArtworkKey({
+            artist: tags.artist,
+            albumArtist: tags.albumArtist,
+            album: tags.album,
+            year: tags.year,
+          }) ?? path;
 
-      const lrcText = null;
-      const lrcMs = performance.now() - lrcStartedAt;
-
-      tags.lyrics = mergeLyrics({
-        lrcText,
-        embedded: tags.embeddedLyrics,
-      });
-
-      /*
-       * Start embedded artwork extraction independently.
-       */
-      let artworkInfo = null;
-
-      const artworkKey = makeEmbeddedArtworkKey({
-        artist: tags.artist,
-        albumArtist: tags.albumArtist,
-        album: tags.album,
-        year: tags.year,
-      });
-
-      if (artworkKey && embeddedArtworkResolver) {
-        const artworkPromise = embeddedArtworkResolver.getOrExtract({
-          key: artworkKey,
-          file,
-        });
-
-        artworkInfo = {
-          artworkKey,
-          artworkPromise,
-        };
-
-        embeddedArtworkByPath.set(path, artworkInfo);
+        artworkHash = await hashArtworkCached(artworkKey, tags.artworkBytes);
       }
 
       /*
@@ -384,10 +278,10 @@ async function enrichQueued(
           path,
           sizeMB: Number((file.size / 1024 / 1024).toFixed(2)),
           metadataWaitMs: Math.round(metadataWaitMs),
-          lrcMs: Math.round(lrcMs),
           artist: tags.artist || null,
           title: tags.title || null,
           album: tags.album || null,
+          hasArtwork: Boolean(tags.artworkBytes),
         });
       }
 
@@ -412,6 +306,7 @@ async function enrichQueued(
         size: file.size,
         lastModified: file.lastModified,
         tags,
+        artworkHash,
       });
     } catch (err) {
       totalStats.errors += 1;
@@ -427,8 +322,6 @@ async function enrichQueued(
   });
 
   await drain(true);
-
-  embeddedArtworkByPath.clear();
 
   emitProgress?.cancel();
 }
@@ -701,12 +594,10 @@ export async function scanDirectory(
     };
 
     /*
-     * One resolver for the entire scan means tracks belonging to the same
-     * album share one embedded-artwork extraction.
+     * One hash cache for the entire scan means tracks belonging to the
+     * same album only get their embedded cover hashed once.
      */
-    const embeddedArtworkResolver = createEmbeddedArtworkResolver({
-      concurrency: 1,
-    });
+    const hashArtworkCached = createArtworkHashCache();
 
     const enrichmentStartedAt = performance.now();
 
@@ -715,12 +606,13 @@ export async function scanDirectory(
       totalStats,
       notify,
       sharedCaches: sharedCaches ?? createEnrichmentCaches(),
-      embeddedArtworkResolver,
+      hashArtworkCached,
     });
 
     /*
-     * Because artwork extraction is intentionally background work, this
-     * timing does NOT include artwork completion.
+     * Because artwork extraction now happens inline as part of the
+     * metadata parse (rather than as separate background work), this
+     * timing DOES include it.
      */
     if (DEBUG_SCAN_TIMING) {
       console.debug("[motif/scan:summary]", {
@@ -810,16 +702,14 @@ export async function resumePendingEnrichment({ onProgress } = {}) {
       }
     }
 
-    const embeddedArtworkResolver = createEmbeddedArtworkResolver({
-      concurrency: 1,
-    });
+    const hashArtworkCached = createArtworkHashCache();
 
     await enrichQueued(queue, {
       onProgress,
       totalStats,
       notify,
       sharedCaches: createEnrichmentCaches(),
-      embeddedArtworkResolver,
+      hashArtworkCached,
     });
 
     if (DEBUG_SCAN_TIMING) {

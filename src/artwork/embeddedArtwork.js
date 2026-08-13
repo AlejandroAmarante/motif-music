@@ -1,6 +1,4 @@
-import { parseBlob } from "music-metadata";
-import { storeArtwork } from "../db/artworkRepo.js";
-
+// src/artwork/embeddedArtwork.js — full updated file (parseBlob-based extractor/resolver removed; only the dedup-key helper remains)
 function normalizeKeyPart(value) {
   return String(value ?? "")
     .trim()
@@ -11,8 +9,18 @@ function normalizeKeyPart(value) {
 /**
  * Generates a scan-scoped key for embedded artwork deduplication.
  *
- * Tracks from the same album normally share the same embedded cover, so only
- * one representative track needs to have its artwork extracted.
+ * Tracks from the same album normally share the same embedded cover, so
+ * hashing (see createArtworkHashCache in db/artworkRepo.js) only needs to
+ * happen once per album — keyed by this — rather than once per track.
+ *
+ * Note: this file used to also own the actual artwork *extraction*
+ * (a second, separate parseBlob() pass over the file, gated to one track
+ * per album). That's gone — metadataWorker.js now extracts embedded
+ * artwork as part of the same parse it already does for title/artist/
+ * album/etc, so there's no second read or second parse left to
+ * coordinate here. This key is only used to memoize the SHA-256 hashing
+ * step, which still benefits from being done once per album rather than
+ * once per track.
  */
 export function makeEmbeddedArtworkKey({ artist, albumArtist, album, year }) {
   const normalizedArtist = normalizeKeyPart(albumArtist || artist);
@@ -26,146 +34,4 @@ export function makeEmbeddedArtworkKey({ artist, albumArtist, album, year }) {
   }
 
   return `${normalizedArtist}|${normalizedAlbum}|${normalizedYear}`;
-}
-
-/**
- * Extracts the first embedded image from an audio file.
- *
- * IMPORTANT:
- * storeArtwork() expects an ArrayBuffer or ArrayBufferView because it hashes
- * the bytes through crypto.subtle.digest(). Do not convert picture.data to a
- * Blob before passing it to storeArtwork().
- */
-export async function extractEmbeddedArtwork(file) {
-  try {
-    const metadata = await parseBlob(file, {
-      duration: false,
-      skipCovers: false,
-    });
-
-    const picture = metadata.common.picture?.[0];
-
-    if (!picture?.data || picture.data.byteLength === 0) {
-      return null;
-    }
-
-    const artworkId = await storeArtwork(
-      picture.data,
-      picture.format || "application/octet-stream",
-    );
-
-    if (!artworkId) {
-      return null;
-    }
-
-    return {
-      artworkId,
-      mimeType: picture.format || "application/octet-stream",
-    };
-  } catch (err) {
-    console.warn(
-      `[motif/artwork] failed to extract embedded artwork from ${file.name}:`,
-      err?.message || err,
-    );
-
-    return null;
-  }
-}
-
-function createConcurrencyGate(limit) {
-  let active = 0;
-  const queue = [];
-
-  function runNext() {
-    if (active >= limit || queue.length === 0) {
-      return;
-    }
-
-    active += 1;
-
-    const { task, resolve, reject } = queue.shift();
-
-    Promise.resolve()
-      .then(task)
-      .then(
-        (result) => {
-          active -= 1;
-          resolve(result);
-          runNext();
-        },
-        (err) => {
-          active -= 1;
-          reject(err);
-          runNext();
-        },
-      );
-  }
-
-  return function gate(task) {
-    return new Promise((resolve, reject) => {
-      queue.push({
-        task,
-        resolve,
-        reject,
-      });
-
-      runNext();
-    });
-  };
-}
-
-/**
- * Creates a scan-scoped resolver.
- *
- * One album:
- *
- *   Track 1 ─┐
- *   Track 2 ─┼─> one artwork extraction
- *   Track 3 ─┘
- *
- * The first track reaching the resolver performs the extraction. All later
- * tracks reuse the same promise.
- */
-export function createEmbeddedArtworkResolver({ concurrency = 1 } = {}) {
-  const gate = createConcurrencyGate(Math.max(1, Math.min(2, concurrency)));
-
-  const promisesByKey = new Map();
-
-  function getOrExtract({ key, file }) {
-    if (!key || !file) {
-      return Promise.resolve(null);
-    }
-
-    const existing = promisesByKey.get(key);
-
-    if (existing) {
-      return existing;
-    }
-
-    const promise = gate(() => extractEmbeddedArtwork(file)).catch((err) => {
-      console.warn(
-        "[motif/artwork] embedded artwork task failed:",
-        err?.message || err,
-      );
-
-      return null;
-    });
-
-    promisesByKey.set(key, promise);
-
-    return promise;
-  }
-
-  function get(key) {
-    if (!key) {
-      return null;
-    }
-
-    return promisesByKey.get(key) ?? null;
-  }
-
-  return {
-    getOrExtract,
-    get,
-  };
 }
